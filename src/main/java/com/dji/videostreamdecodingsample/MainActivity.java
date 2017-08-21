@@ -352,7 +352,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                 Log.d("dsm", "camera recv video data size: " + size +" videobuffer.length= "+videoBuffer.length);
                 // test if video buffer can be sent here
                 // videobuffer.length = 30720  but what is the size from.
-                packUpData(videoBuffer, size);
+                // packUpData(videoBuffer, size);
                 if (useSurface) {
                     Log.d("dsm"," recv data to parse ");
                     DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
