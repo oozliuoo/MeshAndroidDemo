@@ -1,5 +1,5 @@
 ## Java Files Explanation
-There are five java files in the package which I named it "com.dji.videostreamdecodingsample". And details are as follow:
+There are six java files in the package which I named it "com.dji.videostreamdecodingsample". And details are as follow:
 
 ### DJIVideoStreamDecoder.java
 
@@ -38,3 +38,12 @@ There are five java files in the package which I named it "com.dji.videostreamde
 ### JoinActivity.java
 
   It's an Activity class to get watchers to join the mission after clicking the “JOIN” button besides the “OPEN” button. It does the work of downloading and decoding the video stream from the server.
+
+Two notes:
+1.flow of get raw data from camera and preview in one device(the operating one):
+Get videodata from VideoFeeder.callback -> DJIVideoStreamDecoder.parse -> NativeHelper.parse -> get data from NativeDataListener callback onDataRecv -> FrameQueue-> MediaCodec decode-> preview to the surface configured to mediacodec.
+
+2.flow of this version：
+“OPEN” upload: get data from VideoFeeder.callback -> upload to server
+”JOIN“ download and decode： download stream from server -> DJIVideoStreamDecoder.parse -> …-> MediaCodec decode -> preview.
+But note that, it does not work well now. So it would be much appreciated if can help to figure out what is on earth the best way to do this stuff.
