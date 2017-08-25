@@ -33,4 +33,8 @@ There are five java files in the package which I named it "com.dji.videostreamde
 
 ### ConnectionActivity.java
 
-  It's an Activity class to accomplish the connection of phone and the aircraft through the remote controller. And provides two ways to connect: create(upload the stream) or join(download the stream).
+  It's an Activity class to accomplish the connection of phone and the aircraft through the remote controller. And provides two ways to connect: create(upload the stream) or join(download and decode the stream).
+
+### JoinActivity.java
+
+  It's an Activity class to get watchers to join the mission after clicking the “JOIN” button besides the “OPEN” button. It does the work of downloading and decoding the video stream from the server.
