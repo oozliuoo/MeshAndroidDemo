@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">Video Stream Decoding Sample</string>
     <string name="title_main_activity">Video Stream preview</string>
+    <string name="title_join_activity">Join to preview</string>
     <string name="product_information">Product Information</string>
     <string name="connection_loose">Status: No Product Connected</string>
     <string name="model_not_available">Model Not Available</string>

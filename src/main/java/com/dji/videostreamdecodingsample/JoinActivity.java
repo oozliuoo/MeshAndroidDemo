@@ -75,6 +75,9 @@ public class JoinActivity extends Activity {
     private static AtomicBoolean isConnected;
     private static final int MSG_CONNECT =0;
     private static final int MSG_DOWNLOAD = 1;
+
+    private static DatagramPacket recvpacket;
+    private static DatagramSocket recvsocket;
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -117,6 +120,7 @@ public class JoinActivity extends Activity {
                         }
                         break;
                     case MSG_DOWNLOAD:
+                        logd("handle MSG_DOWNLOAD");
                         downloadStream();
                         break;
                     default:
@@ -226,10 +230,11 @@ public class JoinActivity extends Activity {
 
         //and receive code from server
         byte[] rcvData = new byte[1024];
-        DatagramPacket receivepacket = new DatagramPacket(rcvData, 1);
+        DatagramPacket receivepacket = new DatagramPacket(rcvData, 1,inetAddress,port);
         socket.receive(receivepacket);
         recode = new String(receivepacket.getData(),receivepacket.getOffset(), receivepacket.getLength());
         if (recode.equals("2")){
+            isConnected.set(true);
             backHandler.sendEmptyMessage(MSG_DOWNLOAD);
             logd("Join successfully: receive code 2.");
         } else {
@@ -243,19 +248,29 @@ public class JoinActivity extends Activity {
         // aware the size of received data. 1004 if packed.
         // but now it's not 1004. unknow raw data from VideoFeeder.callback
         recvDate = new byte[1004];
-        try {
-            DatagramPacket recvpacket = new DatagramPacket( recvDate, 1004 );
-            DatagramSocket recvSocket = new DatagramSocket(port);
+        recvpacket = new DatagramPacket( recvDate, 1004 );
+        if (null == recvsocket) {
+            try {
+                recvsocket = new DatagramSocket(port);
+//                recvsocket.connect(inetAddress, port);
+                backHandler.sendEmptyMessage(MSG_DOWNLOAD);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }else {
             while (isConnected.get()) {
-                recvSocket.receive(recvpacket);
+                try {
+                    recvsocket.receive(recvpacket);
+                    logd("recvpacket length="+ recvpacket.getData().length);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    isConnected.set(false);
+                    logd(" IOException: handlerthread id = " + Thread.currentThread().getId());
+                }
 
                 DJIVideoStreamDecoder.getInstance().parse(recvDate, recvpacket.getLength());
-                logd("recvdata = "+ new String(recvDate));
+                logd("recvdata = " + new String(recvDate));
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            isConnected.set(false);
-            logd( " IOException: handlerthread id = "+ Thread.currentThread().getId());
         }
 
 

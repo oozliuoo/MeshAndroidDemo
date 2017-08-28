@@ -54,6 +54,8 @@ import static java.lang.System.arraycopy;
 
 public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuvDataListener {
     private static final String TAG = MainActivity.class.getSimpleName();
+
+    private static final String tag = "dsm_MainActivity";
     static final int MSG_WHAT_SHOW_TOAST = 0;
     static final int MSG_WHAT_UPDATE_TITLE = 1;
     static final boolean useSurface = true;
@@ -96,6 +98,8 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     private static final int MSG_SEND =0;
     private static final int MSG_CONNECT =1;
 
+    private static DatagramPacket uppacket;
+    private static DatagramSocket upsocket;
     @Override
     protected void onResume() {
         super.onResume();
@@ -123,6 +127,12 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 
     @Override
     protected void onDestroy() {
+
+        if (Build.VERSION.SDK_INT >= 18) {
+            backgroundHandlerThread.quitSafely();
+        } else {
+            backgroundHandlerThread.quit();
+        }
         if (useSurface) {
             DJIVideoStreamDecoder.getInstance().destroy();
             NativeHelper.getInstance().release();
@@ -137,22 +147,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        sendReady = new AtomicBoolean();
         NativeHelper.getInstance().init();
-        // to differ the action of create or join.
-        Intent intent = getIntent();
-        final boolean isJoin  = intent.getBooleanExtra("isJoin", false);
-        Log.d("dsm", "getIntent isJoin= "+isJoin);
-//        new Toast(this).makeText(this,"isJoin="+isJoin,Toast.LENGTH_LONG).show();
-        String toast = isJoin?"Join":"Open";
-        showToast(toast);
-
-//        try {
-//            connectServer(isJoin);  //once add this it crashes it might take too much time or so.
-//        }catch (IOException e){
-//            e.printStackTrace();
-//        }
-
 
 
         // When the compile and target version is higher than 22, please request the
@@ -173,28 +168,54 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 
         setContentView(R.layout.activity_main);
 
+        sendReady = new AtomicBoolean();
+        //new a background thread to handle server connection
         backgroundHandlerThread = new HandlerThread("background handler thread");
         backgroundHandlerThread.start();
         backgroundHandler = new Handler(backgroundHandlerThread.getLooper()){
             @Override
             public void handleMessage(Message msg) {
-                Log.d("dsm", " into backgroundHandler handleMessage");
                 switch (msg.what){
                     case MSG_SEND:
-                        Log.d("dsm","MSG_SEND sent.");
-                    upData = byteMerger(uploadCode.getBytes(), (byte[]) msg.obj);
-                    try {
-                        DatagramSocket upsocket = new DatagramSocket(port);
-                        DatagramPacket uppacket = new DatagramPacket(upData,upData.length, inetAddress, port);
-                        upsocket.send(uppacket);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                    break;
+//                        byte[] updata = new byte[msg.arg1 + uploadCode.getBytes().length];
+//                        updata = byteMerger(uploadCode.getBytes(), (byte[]) msg.obj);
+
+                        if (sendReady.get()){
+                            //does the size of upData matter a lot? that parse needs size as a param -- parse(buffer, size).
+                            upData = byteMerger(uploadCode.getBytes(), (byte[]) msg.obj);
+                            int len = msg.arg1 + uploadCode.getBytes().length;
+                            logd("msg.arg1= "+msg.arg1 +" | uploadcode length= "+ uploadCode.getBytes().length);
+
+                            uppacket = new DatagramPacket(upData, len, inetAddress, port);
+
+                            if (null==upsocket) {
+                                try {
+                                    upsocket = new DatagramSocket(port);
+//                                    upsocket.connect(inetAddress,port);
+                                    backgroundHandler.sendEmptyMessage(MSG_SEND);
+                                    logd("socket initialized ");
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            }else {
+
+                                logd("MSG_SEND try to send. ");
+                                try {
+                                    upsocket.send(uppacket);
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                                logd("MSG_SEND sent. in thread "+ Thread.currentThread().getId());
+                            }
+
+                        } else {
+                            logd(" not registered");
+                        }
+                        break;
 
                     case MSG_CONNECT:
                         try {
-                            connectServer(isJoin);
+                            connectServer();
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
@@ -209,10 +230,13 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 
         initUi();
         initPreviewer();
+        // same as sendmessage(obtainmesssage(msg.what))
         backgroundHandler.obtainMessage(MSG_CONNECT).sendToTarget();
 
     }
-
+    private void logd(String log){
+        Log.d(tag, log);
+    }
     private void loginAccount(){
 
         UserAccountManager.getInstance().logIntoDJIUserAccount(this,
@@ -229,39 +253,31 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                 });
     }
 
-    private void connectServer(boolean isJoin) throws IOException{
+    private void connectServer() throws IOException{
         inetAddress = InetAddress.getByName("47.90.19.142");
         port = 55055;
         DatagramSocket socket = new DatagramSocket(port);
 
-        deviceid = isJoin?"join_id":"open_id";
+        deviceid = "open_id";
         udptoken1 = "h+itZWK9QAZVBLJL64ZDk+SUQKIWpOn25IcDPWhBB4s=";
-        udptoken2 = "DPJnH7rMjpZ1OJNYXcvUQS/bsZzf0tv4c0PpetVsdwc=";
+//        udptoken2 = "DPJnH7rMjpZ1OJNYXcvUQS/bsZzf0tv4c0PpetVsdwc=";
 
         registerCode = "1"+ deviceid.length()+deviceid+udptoken1.length()+udptoken1;
-        joinCode = "2"+ deviceid.length()+deviceid+udptoken2.length()+udptoken2;
         uploadCode = "3" + deviceid.length()+deviceid+udptoken1.length()+udptoken1;
-        connectData = isJoin? joinCode.getBytes(): registerCode.getBytes();
+        connectData = registerCode.getBytes();
         //new a datagram packet
         DatagramPacket sendpacket = new DatagramPacket(connectData, connectData.length, inetAddress, port);
         //send to server
-        Log.d("dsm","send here as "+ deviceid);
+        logd("send here as "+ deviceid);
         socket.send(sendpacket);
 
         //and receive code from server
         DatagramPacket receivepacket = new DatagramPacket(rcvData, 1);
         socket.receive(receivepacket);
         recode = new String(receivepacket.getData(),receivepacket.getOffset(), receivepacket.getLength());
-        switch (recode){
-            case "1":
-                sendReady.set(true);
-                showToast("receive code 1");
-                break;
-            case "2":
-                //change the source to preview from mediadecoder to server.
-                break;
-            default:
-                break;
+        if (recode.equals("1")){
+            sendReady.set(true);
+            logd("sendReady true. received 1");
         }
 
         socket.close();
@@ -349,15 +365,23 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             @Override
             public void onReceive(byte[] videoBuffer, int size) {
 
-                Log.d("dsm", "camera recv video data size: " + size +" videobuffer.length= "+videoBuffer.length);
+                logd( "camera recv video data size: " + size +" videobuffer.length= "+videoBuffer.length);
                 // test if video buffer can be sent here
-                // videobuffer.length = 30720  but what is the size from.
-                // packUpData(videoBuffer, size);
+                // videobuffer.length = 30720  but where is the size from.
+
+                if (sendReady.get()) {
+                    Message msg = new Message();
+                    msg.what = MSG_SEND;
+                    msg.obj = videoBuffer;
+                    msg.arg1 = size;
+                    backgroundHandler.sendMessage(msg);
+                    // packUpData(videoBuffer, size);
+                }
                 if (useSurface) {
-                    Log.d("dsm"," recv data to parse ");
+                    logd(" recv data to parse ");
                     DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
                 } else if (mCodecManager != null) {
-                    Log.d("dsm", " send data to decoder");
+                    logd( " send data to decoder");
                     mCodecManager.sendDataToDecoder(videoBuffer, size);
                 }
 
@@ -413,7 +437,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 
         if (size > 1000){
             int segments = size/1000 +1;
-            Log.d("dsm"," segments= "+segments );
+            logd(" segments= "+segments );
             byte[][] buffers = new byte[segments][]; //notice whether 1004 has to be declared
             for (int i=0; i<segments; i++ ){
                 segmentID = (short) ((100+i)%(1<<16 -100));  // to prevent segmentID's overflow.
@@ -426,7 +450,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 //                backgroundHandler.obtainMessage(MSG_SEND, buffers[i]).sendToTarget();
                 backgroundHandler.sendMessage(backgroundHandler.obtainMessage(MSG_SEND, buffers[i]));
 
-                Log.d("dsm", "byte["+i+"]"+"= "+buffers[i].length);
+                logd( "byte["+i+"]"+"= "+buffers[i].length);
             }
         } else {
 
@@ -434,7 +458,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             tmpbytes[0] = (byte) (frameID << 8);
             tmpbytes[1] = (byte) (frameID);
 
-            Log.d("dsm", "tmpbyte[1]= "+tmpbytes[1]);
+            logd( "tmpbyte[1]= "+tmpbytes[1]);
             tmpbytes[2] = 0x00;
             tmpbytes[3] = 0x00;
             System.arraycopy(bytes, 0, tmpbytes, 4, size);
@@ -458,10 +482,10 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     @Override
     public void onYuvDataReceived(byte[] yuvFrame, int width, int height) {
         //here if connected then send the output decoded framedata to server.
-       Log.d("dsm","into onYuvDataReceived yuvFrame.size= "+ yuvFrame.length );
+       logd("into onYuvDataReceived yuvFrame.size= "+ yuvFrame.length );
         if (sendReady.get()) {
 //            packUpData(yuvFrame);
-            showToast("packupdata in YuvDataReceived callback");
+//            showToast("packupdata in YuvDataReceived callback");
         }
 
         //In this demo, we test the YUV data by saving it into JPG files.

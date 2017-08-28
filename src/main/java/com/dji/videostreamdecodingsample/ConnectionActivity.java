@@ -88,17 +88,17 @@ public class ConnectionActivity extends Activity implements View.OnClickListener
         IntentFilter filter = new IntentFilter();
         filter.addAction(VideoDecodingApplication.FLAG_CONNECTION_CHANGE);
         registerReceiver(mReceiver, filter);
-        backThread = new HandlerThread("backthread");
-        backThread.start();
-        backHandler = new Handler(backThread.getLooper()){
-            @Override
-            public void handleMessage(Message msg) {
-                Log.d("dsm","handle empty msg");
-                joinServer();
-
-            }
-
-        };
+//        backThread = new HandlerThread("backthread");
+//        backThread.start();
+//        backHandler = new Handler(backThread.getLooper()){
+//            @Override
+//            public void handleMessage(Message msg) {
+//                Log.d("dsm","handle empty msg");
+//                joinServer();
+//
+//            }
+//
+//        };
     }
 
     @Override
@@ -224,47 +224,47 @@ public class ConnectionActivity extends Activity implements View.OnClickListener
 
 
 
-    private void joinServer() {
-
-        try {
-
-            InetAddress inetAddress = InetAddress.getByName("47.90.19.142");
-            int port = 55055;
-            String deviceid = "join_id";
-            String udptoken2 = "DPJnH7rMjpZ1OJNYXcvUQS/bsZzf0tv4c0PpetVsdwc=";
-
-            String joinCode = "2" + deviceid.length() + deviceid + udptoken2.length() + udptoken2;
-
-            socket = new DatagramSocket(port);
-            socket.setSoTimeout(2000);
-
-            byte[] socketbyte = joinCode.getBytes();
-            DatagramPacket joinPacket = new DatagramPacket(socketbyte, socketbyte.length, inetAddress, port);
-
-
-            Log.d("dsm","send joinpacket");
-            socket.send(joinPacket);
-
-
-            DatagramPacket receivepacket = new DatagramPacket(socketbyte, 1);
-            socket.receive(receivepacket);
-            String rcvcode = new String(receivepacket.getData(), receivepacket.getOffset(), receivepacket.getLength());
-            Log.d("dsm", "rcvcode= " + rcvcode + " |2.equals== " + "2".equals(rcvcode));
-            if ("2".equals(rcvcode)) {
-//            handler.sendMessage(handler.obtainMessage(MSG_JOIN));
-                Intent intent = new Intent(ConnectionActivity.this, MainActivity.class);
-                intent.putExtra("isJoin", true);
-                startActivity(intent);
-            } else {
-                new Toast(this).makeText(this, "can not join please check if created", Toast.LENGTH_SHORT).show();
-            }
-        }catch (IOException e){
-            e.printStackTrace();
-        }finally {
-            socket.close();
-        }
-
-    }
+//    private void joinServer() {
+//
+//        try {
+//
+//            InetAddress inetAddress = InetAddress.getByName("47.90.19.142");
+//            int port = 55055;
+//            String deviceid = "join_id";
+//            String udptoken2 = "DPJnH7rMjpZ1OJNYXcvUQS/bsZzf0tv4c0PpetVsdwc=";
+//
+//            String joinCode = "2" + deviceid.length() + deviceid + udptoken2.length() + udptoken2;
+//
+//            socket = new DatagramSocket(port);
+//            socket.setSoTimeout(2000);
+//
+//            byte[] socketbyte = joinCode.getBytes();
+//            DatagramPacket joinPacket = new DatagramPacket(socketbyte, socketbyte.length, inetAddress, port);
+//
+//
+//            Log.d("dsm","send joinpacket");
+//            socket.send(joinPacket);
+//
+//
+//            DatagramPacket receivepacket = new DatagramPacket(socketbyte, 1);
+//            socket.receive(receivepacket);
+//            String rcvcode = new String(receivepacket.getData(), receivepacket.getOffset(), receivepacket.getLength());
+//            Log.d("dsm", "rcvcode= " + rcvcode + " |2.equals== " + "2".equals(rcvcode));
+//            if ("2".equals(rcvcode)) {
+////            handler.sendMessage(handler.obtainMessage(MSG_JOIN));
+//                Intent intent = new Intent(ConnectionActivity.this, MainActivity.class);
+//                intent.putExtra("isJoin", true);
+//                startActivity(intent);
+//            } else {
+//                new Toast(this).makeText(this, "can not join please check if created", Toast.LENGTH_SHORT).show();
+//            }
+//        }catch (IOException e){
+//            e.printStackTrace();
+//        }finally {
+//            socket.close();
+//        }
+//
+//    }
 
     @Override
     public void onClick(View v) {
@@ -279,10 +279,7 @@ public class ConnectionActivity extends Activity implements View.OnClickListener
             }
             case R.id.btn_join:{
 
-//                new Toast(this).makeText(this,"pressed button join", Toast.LENGTH_SHORT).show();
-//                    joinServer();
-                    backHandler.sendEmptyMessage(0);
-
+                startActivity(new Intent(this, JoinActivity.class));
                 break;
             }
 
