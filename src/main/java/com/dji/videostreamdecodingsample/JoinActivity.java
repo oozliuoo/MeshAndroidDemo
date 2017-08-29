@@ -176,12 +176,12 @@ public class JoinActivity extends Activity {
     private void initInet(){
 
         try {
-            inetAddress = InetAddress.getByName("47.90.19.142");
+            inetAddress = InetAddress.getByName(ServerInfo.STREAM_SERVER_ADDRESS);
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        port = 55055;
+        port = ServerInfo.STREAM_SERVER_UDP_PORT;
         deviceid = "join_id";
         udptoken2 = "DPJnH7rMjpZ1OJNYXcvUQS/bsZzf0tv4c0PpetVsdwc=";
         joinCode = "2"+ deviceid.length()+deviceid+udptoken2.length()+udptoken2;

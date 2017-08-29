@@ -252,8 +252,8 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     }
 
     private void connectServer() throws IOException{
-        inetAddress = InetAddress.getByName("47.90.19.142");
-        port = 55055;
+        inetAddress = InetAddress.getByName(ServerInfo.STREAM_SERVER_ADDRESS);
+        port = ServerInfo.STREAM_SERVER_UDP_PORT;
         DatagramSocket socket = new DatagramSocket(port);
 
         deviceid = "open_id";
