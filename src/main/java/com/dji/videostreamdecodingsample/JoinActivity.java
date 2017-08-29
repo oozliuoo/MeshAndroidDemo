@@ -221,17 +221,17 @@ public class JoinActivity extends Activity {
     private void connectoServer() throws IOException {
 
         //new a datagram packet
-        DatagramSocket socket = new DatagramSocket(port);
+        DatagramSocket connectsocket = new DatagramSocket(port);
         DatagramPacket sendpacket = new DatagramPacket(connectData, connectData.length, inetAddress, port);
 
         //send to server
+        connectsocket.send(sendpacket);
         logd("send here as "+ deviceid);
-        socket.send(sendpacket);
 
         //and receive code from server
         byte[] rcvData = new byte[1024];
-        DatagramPacket receivepacket = new DatagramPacket(rcvData, 1,inetAddress,port);
-        socket.receive(receivepacket);
+        DatagramPacket receivepacket = new DatagramPacket(rcvData, 1);
+        connectsocket.receive(receivepacket);
         recode = new String(receivepacket.getData(),receivepacket.getOffset(), receivepacket.getLength());
         if (recode.equals("2")){
             isConnected.set(true);
@@ -240,24 +240,26 @@ public class JoinActivity extends Activity {
         } else {
 //            socket.close();
         }
-        socket.close();
+        connectsocket.close();
 
     }
     private void downloadStream(){
 
         // aware the size of received data. 1004 if packed.
         // but now it's not 1004. unknow raw data from VideoFeeder.callback
-        recvDate = new byte[1004];
-        recvpacket = new DatagramPacket( recvDate, 1004 );
         if (null == recvsocket) {
             try {
+                recvDate = new byte[1004];
+                recvpacket = new DatagramPacket( recvDate, 1004, inetAddress, port);
                 recvsocket = new DatagramSocket(port);
 //                recvsocket.connect(inetAddress, port);
-                backHandler.sendEmptyMessage(MSG_DOWNLOAD);
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        }else {
+            logd("recvsocket initialized for the first time");
+        }
+
+        //continually receive data from the server.
             while (isConnected.get()) {
                 try {
                     recvsocket.receive(recvpacket);
@@ -271,7 +273,7 @@ public class JoinActivity extends Activity {
                 DJIVideoStreamDecoder.getInstance().parse(recvDate, recvpacket.getLength());
                 logd("recvdata = " + new String(recvDate));
             }
-        }
+
 
 
 

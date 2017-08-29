@@ -192,12 +192,11 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                                 try {
                                     upsocket = new DatagramSocket(port);
 //                                    upsocket.connect(inetAddress,port);
-                                    backgroundHandler.sendEmptyMessage(MSG_SEND);
                                     logd("socket initialized ");
                                 } catch (IOException e) {
                                     e.printStackTrace();
                                 }
-                            }else {
+                            }
 
                                 logd("MSG_SEND try to send. ");
                                 try {
@@ -206,7 +205,6 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                                     e.printStackTrace();
                                 }
                                 logd("MSG_SEND sent. in thread "+ Thread.currentThread().getId());
-                            }
 
                         } else {
                             logd(" not registered");
