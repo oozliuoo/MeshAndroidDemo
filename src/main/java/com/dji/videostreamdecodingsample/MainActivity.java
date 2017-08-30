@@ -27,6 +27,8 @@ import com.dji.videostreamdecodingsample.media.DJIVideoStreamDecoder;
 
 import com.dji.videostreamdecodingsample.media.NativeHelper;
 
+import org.w3c.dom.Text;
+
 import dji.common.error.DJIError;
 import dji.common.product.Model;
 import dji.common.useraccount.UserAccountState;
@@ -64,6 +66,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     private TextureView videostreamPreviewTtView;
     private SurfaceView videostreamPreviewSf;
     private SurfaceHolder videostreamPreviewSh;
+    private TextView mLogTv;
 
     private BaseProduct mProduct;
     private Camera mCamera;
@@ -83,7 +86,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     private byte[] upData = new byte[1200];
     private String registerCode = new String();
     private String joinCode = new String();
-    private String recode = new String();
+    private int recode;
     private byte[] uploadData;
     private String deviceid = new String();
     private String udptoken1 = new String();
@@ -179,7 +182,6 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                     case MSG_SEND:
 //                        byte[] updata = new byte[msg.arg1 + uploadData.getBytes().length];
 //                        updata = byteMerger(uploadData.getBytes(), (byte[]) msg.obj);
-
                         if (sendReady.get()){
                             //does the size of upData matter a lot? that parse needs size as a param -- parse(buffer, size).
                             upData = byteMerger(uploadData, (byte[]) msg.obj);
@@ -198,13 +200,13 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                                 }
                             }
 
-                                logd("MSG_SEND try to send. ");
-                                try {
-                                    upsocket.send(uppacket);
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-                                logd("MSG_SEND sent. in thread "+ Thread.currentThread().getId());
+                            logd("MSG_SEND try to send. ");
+                            try {
+                                upsocket.send(uppacket);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                            logd("MSG_SEND sent. in thread "+ Thread.currentThread().getId());
 
                         } else {
                             logd(" not registered");
@@ -257,24 +259,32 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         DatagramSocket socket = new DatagramSocket(port);
 
         deviceid = "open_id";
-        udptoken1 = "h+itZWK9QAZVBLJL64ZDk+SUQKIWpOn25IcDPWhBB4s=";
+        udptoken1 = ServerInfo.UDP_TOKEN1;
 //        udptoken2 = "DPJnH7rMjpZ1OJNYXcvUQS/bsZzf0tv4c0PpetVsdwc=";
 
+        this.log("Constructing upload and connnect data");
         uploadData = Utils.constructSocketData(ServerInfo.PUSH_IMAGE_TRANSMISSION_EVENT_ID, deviceid, udptoken1);
         connectData = Utils.constructSocketData(ServerInfo.REGISTER_DEVICE_EVENT_ID, deviceid, udptoken1);
         //new a datagram packet
         DatagramPacket sendpacket = new DatagramPacket(connectData, connectData.length, inetAddress, port);
         //send to server
         logd("send here as "+ deviceid);
+        this.log("Sending register device request");
         socket.send(sendpacket);
+        this.log("Sent register device request");
 
         //and receive code from server
         DatagramPacket receivepacket = new DatagramPacket(rcvData, 1);
         socket.receive(receivepacket);
-        recode = new String(receivepacket.getData(),receivepacket.getOffset(), receivepacket.getLength());
-        if (recode.equals("1")){
+        this.log("Received register device request");
+        recode = (int)receivepacket.getData()[0];
+        this.log("Registering device");
+        if (recode == 1) {
             sendReady.set(true);
+            this.log("Register device succeeds");
             logd("sendReady true. received 1");
+        } else {
+            this.log("Register device failed: return code not match - returned code " + recode);
         }
 
         socket.close();
@@ -310,6 +320,11 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         );
     }
 
+    private void log(String s)
+    {
+        this.mLogTv.setText(s);
+    }
+
     private void initUi() {
         savePath = (TextView) findViewById(R.id.activity_main_save_path);
         screenShot = (TextView) findViewById(R.id.activity_main_screen_shot);
@@ -317,6 +332,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         titleTv = (TextView) findViewById(R.id.title_tv);
         videostreamPreviewTtView = (TextureView) findViewById(R.id.livestream_preview_ttv);
         videostreamPreviewSf = (SurfaceView) findViewById(R.id.livestream_preview_sf);
+        mLogTv = (TextView) findViewById(R.id.activity_main_log);
         videostreamPreviewSh = videostreamPreviewSf.getHolder();
         if (useSurface) {
             videostreamPreviewSf.setVisibility(View.VISIBLE);

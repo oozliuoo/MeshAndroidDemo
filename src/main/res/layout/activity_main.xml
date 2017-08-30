@@ -26,7 +26,7 @@
     <TextureView
         android:id="@+id/livestream_preview_ttv"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="400dp"
         android:layout_centerInParent="true"
         android:layout_gravity="center"
         android:alpha="50"
@@ -36,7 +36,7 @@
     <SurfaceView
         android:id="@+id/livestream_preview_sf"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="400dp"
         android:layout_centerInParent="true"
         android:layout_gravity="center"
         android:visibility="gone"
@@ -58,11 +58,16 @@
     <TextView
         android:id="@+id/activity_main_save_path"
         android:layout_width="300dp"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:layout_alignParentRight="true"
         android:layout_below="@id/main_title_rl"
         android:textColor="@color/colorWhite"
         android:visibility="invisible"
         />
+    <TextView
+        android:id="@+id/activity_main_log"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"/>
 
 </RelativeLayout>
