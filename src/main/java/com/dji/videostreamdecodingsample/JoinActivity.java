@@ -64,7 +64,7 @@ public class JoinActivity extends Activity {
     private int port;
     private String deviceid;
     private String udptoken2;
-    private String joinCode;
+    private String joinData;
     private String recode;
     private byte[] connectData;
     private byte[] recvDate;
@@ -184,8 +184,8 @@ public class JoinActivity extends Activity {
         port = ServerInfo.STREAM_SERVER_UDP_PORT;
         deviceid = "join_id";
         udptoken2 = "DPJnH7rMjpZ1OJNYXcvUQS/bsZzf0tv4c0PpetVsdwc=";
-        joinCode = "2"+ deviceid.length()+deviceid+udptoken2.length()+udptoken2;
-        connectData = joinCode.getBytes();
+
+        connectData = Utils.constructSocketData(ServerInfo.REQUEST_IMAGE_TRANSMISSION_EVENT_ID, deviceid, udptoken2);
     }
 
     private void initUI(){
@@ -233,7 +233,7 @@ public class JoinActivity extends Activity {
         DatagramPacket receivepacket = new DatagramPacket(rcvData, 1);
         connectsocket.receive(receivepacket);
         recode = new String(receivepacket.getData(),receivepacket.getOffset(), receivepacket.getLength());
-        if (recode.equals("2")){
+        if (recode.equals(2)){
             isConnected.set(true);
             backHandler.sendEmptyMessage(MSG_DOWNLOAD);
             logd("Join successfully: receive code 2.");

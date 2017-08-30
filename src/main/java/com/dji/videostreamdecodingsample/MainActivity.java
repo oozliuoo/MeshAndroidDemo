@@ -84,7 +84,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     private String registerCode = new String();
     private String joinCode = new String();
     private String recode = new String();
-    private String uploadCode = new String();
+    private byte[] uploadData;
     private String deviceid = new String();
     private String udptoken1 = new String();
     private String udptoken2 = new String();
@@ -177,14 +177,14 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             public void handleMessage(Message msg) {
                 switch (msg.what){
                     case MSG_SEND:
-//                        byte[] updata = new byte[msg.arg1 + uploadCode.getBytes().length];
-//                        updata = byteMerger(uploadCode.getBytes(), (byte[]) msg.obj);
+//                        byte[] updata = new byte[msg.arg1 + uploadData.getBytes().length];
+//                        updata = byteMerger(uploadData.getBytes(), (byte[]) msg.obj);
 
                         if (sendReady.get()){
                             //does the size of upData matter a lot? that parse needs size as a param -- parse(buffer, size).
-                            upData = byteMerger(uploadCode.getBytes(), (byte[]) msg.obj);
-                            int len = msg.arg1 + uploadCode.getBytes().length;
-                            logd("msg.arg1= "+msg.arg1 +" | uploadcode length= "+ uploadCode.getBytes().length);
+                            upData = byteMerger(uploadData, (byte[]) msg.obj);
+                            int len = msg.arg1 + uploadData.length;
+                            logd("msg.arg1= "+msg.arg1 +" | uploadData length= "+ uploadData.length);
 
                             uppacket = new DatagramPacket(upData, len, inetAddress, port);
 
@@ -260,9 +260,8 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         udptoken1 = "h+itZWK9QAZVBLJL64ZDk+SUQKIWpOn25IcDPWhBB4s=";
 //        udptoken2 = "DPJnH7rMjpZ1OJNYXcvUQS/bsZzf0tv4c0PpetVsdwc=";
 
-        registerCode = "1"+ deviceid.length()+deviceid+udptoken1.length()+udptoken1;
-        uploadCode = "3" + deviceid.length()+deviceid+udptoken1.length()+udptoken1;
-        connectData = registerCode.getBytes();
+        uploadData = Utils.constructSocketData(ServerInfo.PUSH_IMAGE_TRANSMISSION_EVENT_ID, deviceid, udptoken1);
+        connectData = Utils.constructSocketData(ServerInfo.REGISTER_DEVICE_EVENT_ID, deviceid, udptoken1);
         //new a datagram packet
         DatagramPacket sendpacket = new DatagramPacket(connectData, connectData.length, inetAddress, port);
         //send to server
