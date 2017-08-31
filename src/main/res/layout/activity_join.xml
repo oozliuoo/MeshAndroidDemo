@@ -41,6 +41,11 @@
         android:layout_gravity="center"
         android:visibility="gone"
         android:layout_below="@id/main_title_rl"/>
+    <TextView
+        android:id="@+id/log_tv"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"/>
 
 
 </RelativeLayout>

@@ -97,7 +97,6 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     private static InetAddress inetAddress;
     private static int port;
     private static AtomicBoolean sendReady;
-    private static AtomicBoolean mVideoSent;
 
     private static final int MSG_SEND =0;
     private static final int MSG_CONNECT =1;
@@ -173,7 +172,6 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         setContentView(R.layout.activity_main);
 
         sendReady = new AtomicBoolean();
-        mVideoSent = new AtomicBoolean(false);
         //new a background thread to handle server connection
         backgroundHandlerThread = new HandlerThread("background handler thread");
         backgroundHandlerThread.start();
@@ -384,19 +382,25 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                 // videobuffer.length = 30720  but where is the size from.
 
                 if (sendReady.get()) {
+                    String logMesg = "recv data to parse: " + size + "\nbuffer: ";
+                    for (int i = 0; i < 100; i ++) {
+                        logMesg += videoBuffer[i] + " ";
+                    }
+                    log(logMesg);
                     Message msg = new Message();
                     msg.what = MSG_SEND;
                     msg.obj = videoBuffer;
                     msg.arg1 = size;
                     backgroundHandler.sendMessage(msg);
                     // packUpData(videoBuffer, size);
-                }
-                if (useSurface) {
-                    logd(" recv data to parse ");
-                    DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
-                } else if (mCodecManager != null) {
-                    logd( " send data to decoder");
-                    mCodecManager.sendDataToDecoder(videoBuffer, size);
+
+                    if (useSurface) {
+                        logd(" recv data to parse ");
+                        DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
+                    } else if (mCodecManager != null) {
+                        logd( " send data to decoder");
+                        mCodecManager.sendDataToDecoder(videoBuffer, size);
+                    }
                 }
 
 
