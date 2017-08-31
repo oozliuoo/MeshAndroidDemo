@@ -97,6 +97,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     private static InetAddress inetAddress;
     private static int port;
     private static AtomicBoolean sendReady;
+    private static AtomicBoolean mVideoSent;
 
     private static final int MSG_SEND =0;
     private static final int MSG_CONNECT =1;
@@ -172,6 +173,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         setContentView(R.layout.activity_main);
 
         sendReady = new AtomicBoolean();
+        mVideoSent = new AtomicBoolean(false);
         //new a background thread to handle server connection
         backgroundHandlerThread = new HandlerThread("background handler thread");
         backgroundHandlerThread.start();
@@ -359,7 +361,6 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             videostreamPreviewTtView.setVisibility(View.VISIBLE);
         }
     }
-
 
     private void notifyStatusChange() {
 

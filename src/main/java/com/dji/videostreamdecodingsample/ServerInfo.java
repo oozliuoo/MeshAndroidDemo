@@ -16,6 +16,6 @@ public final class ServerInfo {
     public static final byte REQUEST_IMAGE_TRANSMISSION_EVENT_ID = 0x02;
     public static final byte PUSH_IMAGE_TRANSMISSION_EVENT_ID = 0x03;
 
-    public static final String UDP_TOKEN1 = LOCAL_TEST ? "sAbdehmZ6+1sfGjhMKUJppMEF6hFqKvRqGsVRE8FnwI=" : "h+itZWK9QAZVBLJL64ZDk+SUQKIWpOn25IcDPWhBB4s=";
-    public static final String UDP_TOKEN2 = LOCAL_TEST ? "G9LRPRzuv2b2jhG3qnIq9QuieMf6C3q/r/rwuIEv8vI=" : "DPJnH7rMjpZ1OJNYXcvUQS/bsZzf0tv4c0PpetVsdwc=";
+    public static final String UDP_TOKEN1 = LOCAL_TEST ? "a6yC0L++Xh6zQpudv6jRVqT2qYTfIvGix4EDuMEEyNw=" : "h+itZWK9QAZVBLJL64ZDk+SUQKIWpOn25IcDPWhBB4s=";
+    public static final String UDP_TOKEN2 = LOCAL_TEST ? "ZHg4q5rWXp2hY/Py4KRTqHaBBfldxYn2J+uzKig6aKU=" : "DPJnH7rMjpZ1OJNYXcvUQS/bsZzf0tv4c0PpetVsdwc=";
 }

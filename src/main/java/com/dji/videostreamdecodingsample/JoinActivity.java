@@ -249,24 +249,16 @@ public class JoinActivity extends Activity {
         }
         socket.close();
     }
-    private void downloadStream(){
-
-        // aware the size of received data. 1004 if packed.
-        // but now it's not 1004. unknow raw data from VideoFeeder.callback
-        if (null == recvsocket) {
-            try {
-                recvData = new byte[6000];
-                recvpacket = new DatagramPacket(recvData, recvData.length, inetAddress, port);
-                recvsocket = new DatagramSocket(port);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            logd("recvsocket initialized for the first time");
-        }
-
+    private void downloadStream() {
         //continually receive data from the server.
         while (isConnected.get()) {
             try {
+                // aware the size of received data. 1004 if packed.
+                // but now it's not 1004. unknow raw data from VideoFeeder.callback
+                recvData = new byte[6000];
+                recvpacket = new DatagramPacket(recvData, recvData.length, inetAddress, port);
+                recvsocket = new DatagramSocket(port);
+                logd("recvsocket initialized for the first time");
                 recvsocket.receive(recvpacket);
                 logd("recvpacket length="+ recvpacket.getData().length);
             } catch (IOException e) {
@@ -274,21 +266,18 @@ public class JoinActivity extends Activity {
                 isConnected.set(false);
                 logd(" IOException: handlerthread id = " + Thread.currentThread().getId());
             }
-
-            int validByteCount = 0;
-            for (int i = 0; i < recvData.length; i ++)
-            {
-                validByteCount += recvData[i] != 0 ? 1 : 0;
-            }
             int deviceIdLength = (int)recvData[1];
-            byte[] videoData = new byte[validByteCount - 2 - deviceIdLength];
+            byte[] videoData = new byte[recvpacket.getLength() - 2 - deviceIdLength];
 
-            for (int i = deviceIdLength + 2; i < validByteCount; i ++)
+            for (int i = deviceIdLength + 2; i < recvpacket.getLength(); i ++)
             {
                 videoData[i - deviceIdLength - 2] = recvData[i];
             }
 
             DJIVideoStreamDecoder.getInstance().parse(videoData, videoData.length);
+            recvsocket.close();
+            recvsocket = null;
+            recvData = null;
             logd("recvdata = " + new String(recvData));
         }
     }
