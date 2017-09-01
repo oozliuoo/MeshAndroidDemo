@@ -2,6 +2,8 @@ package com.dji.videostreamdecodingsample;
 
 import android.Manifest;
 import android.app.Activity;
+import android.graphics.SurfaceTexture;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -9,6 +11,7 @@ import android.os.HandlerThread;
 import android.os.Message;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
+import android.text.format.Formatter;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -22,12 +25,16 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketTimeoutException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.dji.videostreamdecodingsample.media.NativeHelper;
 
 import dji.sdk.base.BaseProduct;
 import dji.sdk.codec.DJICodecManager;
+
+import static android.R.attr.port;
 
 /**
  * Created by durian on 2017/8/20.
@@ -36,32 +43,31 @@ import dji.sdk.codec.DJICodecManager;
 public class JoinActivity extends Activity {
 
     private static final String TAG = "dsm_JoinActivity";
-    private TextView titleTv;
+
+    // UI elements
     private TextureView videostreamPreviewTtView;
     private SurfaceView videostreamPreviewSf;
     private SurfaceHolder videostreamPreviewSh;
     private TextView mLogTextView;
+    private TextView titleTv;
 
-    private BaseProduct mProduct;
+    // DJI SDK related
     private DJICodecManager mCodecManager;
-    private InetAddress inetAddress;
-    private int port;
-    private String deviceid;
-    private String udptoken2;
-    private String joinData;
-    private byte[] registerDeviceData;
-    private byte[] joinImageTransmissionData;
-    private byte[] recvData;
 
+    // sockets
+    private UDPSocket downloadSocket;
+
+    // Threads and handlers
     private HandlerThread backThread;
     private Handler backHandler;
 
-    private static AtomicBoolean isConnected;
+    // Looper messages
     private static final int MSG_CONNECT =0;
     private static final int MSG_DOWNLOAD = 1;
 
-    private static DatagramPacket recvpacket;
-    private static DatagramSocket recvsocket;
+    // atomic booleans for locks
+    private static AtomicBoolean isConnected;
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -83,9 +89,11 @@ public class JoinActivity extends Activity {
         }
 
         setContentView(R.layout.activity_join);
-        initInet();
-        initUI();
+        // create and initialize download socket
+        downloadSocket = new UDPSocket(ServerInfo.STREAM_SERVER_ADDRESS, ServerInfo.STREAM_SERVER_UDP_PORT, ServerInfo.SOCKET_TIMEOUT);
 
+        initUI();
+        initPreviewer();
 
         isConnected = new AtomicBoolean();
 
@@ -97,11 +105,7 @@ public class JoinActivity extends Activity {
                 switch (msg.what){
                     case MSG_CONNECT:
                         logd("handle msgconnect");
-                        try {
-                            connectoServer();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
+                        joinImageTransmission();
                         break;
                     case MSG_DOWNLOAD:
                         logd("handle MSG_DOWNLOAD");
@@ -117,7 +121,6 @@ public class JoinActivity extends Activity {
         // connect to server as joining
         if ( backHandler!=null && !backHandler.hasMessages(MSG_CONNECT) )
         backHandler.sendEmptyMessage(MSG_CONNECT);
-
     }
 
     @Override
@@ -142,13 +145,13 @@ public class JoinActivity extends Activity {
     @Override
     protected void onDestroy() {
 
-        DJIVideoStreamDecoder.getInstance().destroy();
-        NativeHelper.getInstance().release();
         if (Build.VERSION.SDK_INT >= 18) {
             backThread.quitSafely();
         } else {
             backThread.quit();
         }
+        DJIVideoStreamDecoder.getInstance().destroy();
+        NativeHelper.getInstance().release();
 
         super.onDestroy();
     }
@@ -157,20 +160,35 @@ public class JoinActivity extends Activity {
         Log.d(TAG, log);
     }
 
-    private void initInet(){
+    /**
+     * Init a fake texture view to for the codec manager, so that the video raw data can be received
+     * by the camera
+     */
+    private void initPreviewer() {
+        videostreamPreviewTtView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            @Override
+            public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+                Log.d(TAG, "real onSurfaceTextureAvailable");
+                if (mCodecManager == null) {
+                    mCodecManager = new DJICodecManager(getApplicationContext(), surface, width, height);
+                }
+            }
 
-        try {
-            inetAddress = InetAddress.getByName(ServerInfo.STREAM_SERVER_ADDRESS);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+            @Override
+            public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+            }
 
-        port = ServerInfo.STREAM_SERVER_UDP_PORT;
-        deviceid = "open_id";
-        udptoken2 = ServerInfo.UDP_TOKEN2;
+            @Override
+            public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+                if (mCodecManager != null) mCodecManager.cleanSurface();
+                return false;
+            }
 
-        registerDeviceData = Utils.constructSocketData(ServerInfo.REGISTER_DEVICE_EVENT_ID, deviceid, udptoken2);
-        joinImageTransmissionData = Utils.constructSocketData(ServerInfo.REQUEST_IMAGE_TRANSMISSION_EVENT_ID, deviceid, udptoken2);
+            @Override
+            public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+
+            }
+        });
     }
 
     private void log(String s) {
@@ -184,128 +202,134 @@ public class JoinActivity extends Activity {
         videostreamPreviewSf = (SurfaceView) findViewById(R.id.livestream_preview_sf);
         mLogTextView = (TextView) findViewById(R.id.log_tv);
         videostreamPreviewSh = videostreamPreviewSf.getHolder();
-            videostreamPreviewSf.setVisibility(View.VISIBLE);
-            videostreamPreviewTtView.setVisibility(View.GONE);
-            videostreamPreviewSh.addCallback(new SurfaceHolder.Callback() {
-                @Override
-                public void surfaceCreated(SurfaceHolder holder) {
-                    DJIVideoStreamDecoder.getInstance().init(getApplicationContext(), videostreamPreviewSh.getSurface());
-                    // yuv data needed when screenshot
+        videostreamPreviewSf.setVisibility(View.VISIBLE);
+        videostreamPreviewTtView.setVisibility(View.GONE);
+        videostreamPreviewSh.addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+                DJIVideoStreamDecoder.getInstance().init(getApplicationContext(), videostreamPreviewSh.getSurface());
+                // yuv data needed when screenshot
 //                    DJIVideoStreamDecoder.getInstance().setYuvDataListener(JoinActivity.this);
-                }
+            }
 
-                @Override
-                public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-                    DJIVideoStreamDecoder.getInstance().changeSurface(holder.getSurface());
-                }
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                DJIVideoStreamDecoder.getInstance().changeSurface(holder.getSurface());
+            }
 
-                @Override
-                public void surfaceDestroyed(SurfaceHolder holder) {
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
 
-                }
-            });
-
-    }
-
-
-    private void connectoServer() throws IOException {
-        // registerDevice();
-        joinImageTransmission();
-    }
-
-    private void registerDevice() throws IOException {
-        DatagramSocket socket = new DatagramSocket(port);
-        DatagramPacket packet = new DatagramPacket(registerDeviceData, registerDeviceData.length, inetAddress, port);
-
-        //send to server
-        socket.send(packet);
-        logd("Register device with deviceID:  "+ deviceid);
-
-        //and receive code from server
-        byte[] rcvData = new byte[1024];
-        DatagramPacket receivepacket = new DatagramPacket(rcvData, 1);
-        socket.receive(receivepacket);
-        int recode = (int)receivepacket.getData()[0];
-        if (recode == 1){
-            isConnected.set(true);
-            logd("Register successfully: receive code 1.");
-        }
-        socket.close();
+            }
+        });
 
     }
 
-    private void joinImageTransmission() throws IOException {
-        // initialize datagram
-        DatagramSocket socket = new DatagramSocket(port);
-        DatagramPacket packet = new DatagramPacket(joinImageTransmissionData, joinImageTransmissionData.length, inetAddress, port);
+    /**
+     * Join image transmission by sending request to server
+     * @throws IOException
+     */
+    private void joinImageTransmission() {
+        boolean receiveResponse = false;
 
-        //send to server
-        socket.send(packet);
-        logd("Joining Image Transmission as deviceID: "+ deviceid);
-
-        //and receive code from server
-        byte[] rcvData = new byte[1024];
-        DatagramPacket receivepacket = new DatagramPacket(rcvData, 1);
-        socket.receive(receivepacket);
-        int recode = (int)receivepacket.getData()[0];
-        if (recode == 2){
-            isConnected.set(true);
-            backHandler.sendEmptyMessage(MSG_DOWNLOAD);
-            logd("Join successfully: receive code 2.");
-        }
-        socket.close();
-    }
-    private void downloadStream() {
-        //continually receive data from the server.
-        if (recvsocket == null) {
+        while (!receiveResponse) {
             try {
-                recvsocket = new DatagramSocket(port);
+                // connect socket
+                downloadSocket.connect();
+
+                // send join image transmission request server
+                downloadSocket.send(ServerInfo.JOIN_IMAGE_TRANSMISSION_DATA, ServerInfo.JOIN_IMAGE_TRANSMISSION_DATA.length);
+
+                // receive code from server
+                byte[] buffer = new byte[1024];
+                byte[] receiveData = downloadSocket.receive(buffer, 1);
+                int response = receiveData != null ? (int) receiveData[0] : -1;
+                receiveResponse = true;
+                if (response == 2) {
+                    isConnected.set(true);
+                    backHandler.sendEmptyMessage(MSG_DOWNLOAD);
+                    logd("Join successfully: receive code 2.");
+                }
             } catch (IOException e) {
                 e.printStackTrace();
-                isConnected.set(false);
-                logd(" IOException: on initialize recvsocket handlerthread id = " + Thread.currentThread().getId());
+                continue;
             }
         }
+        /* if (null != joinSocket) {
+            joinSocket.close();
+        } */
+    }
+
+    /**
+     * Continuously receive stream data from server
+     */
+    private void downloadStream() {
+        byte[] recvData;
+        byte[] response;
+        /* try {
+            // connect downloadSocket
+            downloadSocket.connect();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            isConnected.set(false);
+            logd(" IOException: on initialize recvsocket handlerthread id = " + Thread.currentThread().getId());
+        } */
         int count = 0;
-        long byteCount = 0;
         while (isConnected.get()) {
             try {
-                // aware the size of received data. 1004 if packed.
-                // but now it's not 1004. unknow raw data from VideoFeeder.callback
+                // send join image transmission request server
                 recvData = new byte[6000];
-                recvpacket = new DatagramPacket(recvData, recvData.length, inetAddress, port);
-                logd("recvsocket initialized for the first time");
-                recvsocket.receive(recvpacket);
-                logd("recvpacket length="+ recvpacket.getData().length);
+                response = downloadSocket.receive(recvData, recvData.length);
+            } catch (SocketTimeoutException e) {
+                logd("recvsocket receive timeout; try one more time");
+                continue;
             } catch (IOException e) {
                 e.printStackTrace();
                 isConnected.set(false);
                 logd(" IOException: handlerthread id = " + Thread.currentThread().getId());
+                break;
             }
             try {
-                int deviceIdLength = (int) recvData[1];
-                byte[] videoData = new byte[recvpacket.getLength() - 2 - deviceIdLength];
+                byte[] videoData = parseVideoData(response);
 
-                for (int i = deviceIdLength + 2; i < recvpacket.getLength(); i++) {
-                    videoData[i - deviceIdLength - 2] = recvData[i];
-                }
-
+                // should remove below after testing
                 String logMsg = "";
-                logMsg += "Received data length: " + videoData.length + "\n buffer (first 100): ";
-                for (int i = 0; i < Math.min(100, videoData.length); i++) {
-                    logMsg += videoData[i];
+                logMsg += "Received data length: " + videoData.length + "\n buffer (first 10): ";
+                if(count < 10) {
+                    for (int i = 0; i < Math.min(10, videoData.length); i++) {
+                        logMsg += (int) videoData[i];
+                    }
                 }
                 logd(logMsg);
                 count += 1;
-                byteCount += recvpacket.getLength();
-                logd("receive " + count + " times, receive size sum: " + byteCount);
+                logd("receive " + count + " times");
+                // should remove above after testing
 
-                DJIVideoStreamDecoder.getInstance().parse(videoData, videoData.length);
-                recvData = null;
+                // DJIVideoStreamDecoder.getInstance().parse(videoData, videoData.length);
             } catch (Exception e) {
-                logd("Generic Exception = " + e.toString());
+                logd("Generic Exception when parsing/displaying video data: " + e.toString());
+                downloadSocket.close();
             }
         }
+
+        downloadSocket.close();
+    }
+
+    /**
+     * Parse video data as an array of bytes from response
+     * @param response - response from server
+     * @return video data as an array of bytes
+     */
+    private byte[] parseVideoData(byte[] response) {
+        int deviceIdLength = (int) response[1];
+        byte[] videoData = new byte[response.length - 2 - deviceIdLength];
+
+        for (int i = deviceIdLength + 2; i < response.length; i++) {
+            videoData[i - deviceIdLength - 2] = response[i];
+        }
+
+        return videoData;
     }
     private void parseStream(){
 
