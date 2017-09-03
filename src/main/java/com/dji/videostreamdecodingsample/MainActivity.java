@@ -290,11 +290,25 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                 keyFrameSent = true;
             }
 
-            // construct upload data
-            byte[] upData = Utils.byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, data);
+            if (size < 1000) {
+                // construct upload data
+                byte[] upData = Utils.byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, data);
 
-            // upload data via uploadSocket
-            uploadSocket.send(upData, ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA.length + size);
+                // upload data via uploadSocket
+                uploadSocket.send(upData, ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA.length + size);
+            } else {
+                int offset = 0;
+                while (offset < size) {
+                    int end = (offset + 1000) < size ? (offset + 1000) : size;
+                    byte[] tempBuff = Arrays.copyOfRange(data, offset, end);
+                    // construct upload data
+                    byte[] upData = Utils.byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, tempBuff);
+
+                    // upload data via uploadSocket
+                    uploadSocket.send(upData, ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA.length + tempBuff.length);
+                    offset = end;
+                }
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
