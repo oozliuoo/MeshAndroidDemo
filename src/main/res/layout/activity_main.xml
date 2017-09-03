@@ -56,6 +56,21 @@
         android:layout_below="@id/main_title_rl"
         />
     <TextView
+        android:id="@+id/activity_main_sync"
+        android:layout_width="100dp"
+        android:layout_height="wrap_content"
+        android:text="Sync"
+        android:clickable="true"
+        android:onClick="onClick"
+        android:padding="5dp"
+        android:gravity="center"
+        android:background="@color/colorWhite"
+        android:textColor="@color/colorBlack"
+        android:layout_marginTop="10dp"
+        android:layout_alignParentLeft="true"
+        android:layout_below="@id/activity_main_screen_shot"
+        />
+    <TextView
         android:id="@+id/activity_main_save_path"
         android:layout_width="300dp"
         android:layout_height="wrap_content"

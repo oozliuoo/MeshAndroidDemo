@@ -2,12 +2,15 @@ package com.dji.videostreamdecodingsample;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Context;
 import android.graphics.SurfaceTexture;
+import android.net.DhcpInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.os.Message;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
@@ -18,6 +21,7 @@ import android.view.SurfaceView;
 import android.view.TextureView;
 import android.view.View;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.dji.videostreamdecodingsample.media.DJIVideoStreamDecoder;
 
@@ -26,15 +30,23 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.dji.videostreamdecodingsample.media.NativeHelper;
 
+import dji.common.product.Model;
 import dji.sdk.base.BaseProduct;
+import dji.sdk.camera.Camera;
+import dji.sdk.camera.VideoFeeder;
 import dji.sdk.codec.DJICodecManager;
+import dji.sdk.sdkmanager.DJISDKManager;
 
 import static android.R.attr.port;
+import static com.dji.videostreamdecodingsample.MainActivity.MSG_WHAT_SHOW_TOAST;
+import static com.dji.videostreamdecodingsample.MainActivity.MSG_WHAT_UPDATE_TITLE;
+import static com.dji.videostreamdecodingsample.MainActivity.useSurface;
 
 /**
  * Created by durian on 2017/8/20.
@@ -53,6 +65,9 @@ public class JoinActivity extends Activity {
 
     // DJI SDK related
     private DJICodecManager mCodecManager;
+    private BaseProduct mProduct;
+    private Camera mCamera;
+    protected VideoFeeder.VideoDataCallback mReceivedVideoDataCallBack = null;
 
     // sockets
     private UDPSocket downloadSocket;
@@ -69,10 +84,12 @@ public class JoinActivity extends Activity {
     private static AtomicBoolean isConnected;
 
     @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        NativeHelper.getInstance().init(); // When the compile and target version is higher than 22, please request the
+        NativeHelper.getInstance().init();
+
+        // When the compile and target version is higher than 22, please request the
         // following permissions at runtime to ensure the
         // SDK work well.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -91,9 +108,6 @@ public class JoinActivity extends Activity {
         setContentView(R.layout.activity_join);
         // create and initialize download socket
         downloadSocket = new UDPSocket(ServerInfo.STREAM_SERVER_ADDRESS, ServerInfo.STREAM_SERVER_UDP_PORT, ServerInfo.SOCKET_TIMEOUT);
-
-        initUI();
-        initPreviewer();
 
         isConnected = new AtomicBoolean();
 
@@ -117,21 +131,22 @@ public class JoinActivity extends Activity {
                 }
             }
         };
+        initUI();
+        initPreviewer();
 
         // connect to server as joining
-        if ( backHandler!=null && !backHandler.hasMessages(MSG_CONNECT) )
-        backHandler.sendEmptyMessage(MSG_CONNECT);
+        if ( backHandler!=null && !backHandler.hasMessages(MSG_CONNECT) ) {
+            backHandler.sendEmptyMessage(MSG_CONNECT);
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        DJIVideoStreamDecoder.getInstance().resume();
     }
 
     @Override
     protected void onPause() {
-        DJIVideoStreamDecoder.getInstance().stop();
         super.onPause();
     }
 
@@ -150,8 +165,8 @@ public class JoinActivity extends Activity {
         } else {
             backThread.quit();
         }
-        DJIVideoStreamDecoder.getInstance().destroy();
         NativeHelper.getInstance().release();
+        downloadSocket.close();
 
         super.onDestroy();
     }
@@ -202,8 +217,9 @@ public class JoinActivity extends Activity {
         videostreamPreviewSf = (SurfaceView) findViewById(R.id.livestream_preview_sf);
         mLogTextView = (TextView) findViewById(R.id.log_tv);
         videostreamPreviewSh = videostreamPreviewSf.getHolder();
-        videostreamPreviewSf.setVisibility(View.VISIBLE);
-        videostreamPreviewTtView.setVisibility(View.GONE);
+
+        videostreamPreviewSf.setVisibility(View.GONE);
+        videostreamPreviewTtView.setVisibility(View.VISIBLE);
         videostreamPreviewSh.addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(SurfaceHolder holder) {
@@ -223,6 +239,28 @@ public class JoinActivity extends Activity {
             }
         });
 
+    }
+
+    /**
+     * Return boardcast address in wifi network
+     * @return
+     * @throws IOException
+     */
+    private InetAddress getBroadcastAddress(){
+        InetAddress result = null;
+        try {
+            WifiManager wifi = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            DhcpInfo dhcp = wifi.getDhcpInfo(); // handle null somehow
+            int broadcast = (dhcp.ipAddress & dhcp.netmask) | ~dhcp.netmask;
+            byte[] quads = new byte[4];
+            for (int k = 0; k < 4; k++)
+                quads[k] = (byte) ((broadcast >> k * 8) & 0xFF);
+            result = InetAddress.getByAddress(quads);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return result;
     }
 
     /**
@@ -283,6 +321,11 @@ public class JoinActivity extends Activity {
                 response = downloadSocket.receive(recvData, recvData.length);
             } catch (SocketTimeoutException e) {
                 logd("recvsocket receive timeout; try one more time");
+                try {
+                    TimeUnit.MILLISECONDS.sleep(100);
+                } catch (InterruptedException e2) {
+                    e2.printStackTrace();
+                }
                 continue;
             } catch (IOException e) {
                 e.printStackTrace();
@@ -305,8 +348,11 @@ public class JoinActivity extends Activity {
                 count += 1;
                 logd("receive " + count + " times");
                 // should remove above after testing
+                mCodecManager.sendDataToDecoder(videoData, videoData.length);
 
-                // DJIVideoStreamDecoder.getInstance().parse(videoData, videoData.length);
+                /*
+                */
+
             } catch (Exception e) {
                 logd("Generic Exception when parsing/displaying video data: " + e.toString());
                 downloadSocket.close();
@@ -331,6 +377,7 @@ public class JoinActivity extends Activity {
 
         return videoData;
     }
+
     private void parseStream(){
 
     }
@@ -341,5 +388,11 @@ public class JoinActivity extends Activity {
 
     private void preview(){
 
+    }
+
+    private void updateTitle(String s) {
+    }
+
+    private void showToast(String s) {
     }
 }

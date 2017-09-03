@@ -1,5 +1,8 @@
 package com.dji.videostreamdecodingsample;
 
+import android.content.Context;
+import android.net.DhcpInfo;
+import android.net.wifi.WifiManager;
 import android.provider.ContactsContract;
 
 import java.io.IOException;
@@ -49,18 +52,26 @@ public class UDPSocket {
     }
 
     /**
+     * Constructor of a UDPSocket
+     *
+     * @param address - remote server's address
+     * @param outPort - port for sending data to
+     * @param timeout - timeout of a socket
+     */
+    public UDPSocket(InetAddress address, int outPort, int timeout) {
+        this.mAddress = address;
+        this.mOutPort = outPort;
+        this.mTimeout = timeout > 0 ? timeout : DEFAULT_TIMEOUT;
+    }
+
+    /**
      * Creates the socket if its not created before or if its
      * closed. Then set timeout for the socket
      */
     public void connect() throws IOException {
         if (null == this.mSocket) {
-            this.mSocket = new DatagramSocket();
+            this.mSocket = new DatagramSocket(this.mOutPort);
             this.mSocket.setSoTimeout(this.mTimeout);
-            this.mSocket.setReceiveBufferSize(6000 * 30 * 100);
-        }
-
-        if (!this.mSocket.isConnected()) {
-            this.mSocket.connect(this.mAddress, this.mOutPort);
         }
     }
 

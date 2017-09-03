@@ -44,23 +44,26 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static android.R.attr.port;
+import static com.dji.videostreamdecodingsample.Utils.byteMerger;
 import static java.lang.System.arraycopy;
 
 public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuvDataListener {
     private static final String TAG = MainActivity.class.getSimpleName();
 
     private static final String tag = "dsm_MainActivity";
-    static final boolean useSurface = true;
+    static final boolean useSurface = false;
 
     // Looper messages for main thread
     static final int MSG_WHAT_SHOW_TOAST = 0;
@@ -78,6 +81,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     private TextView mLogTv;
     private TextView savePath;
     private TextView screenShot;
+    private TextView sync;
 
     // DJI SDK related
     private BaseProduct mProduct;
@@ -111,7 +115,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             DJIVideoStreamDecoder.getInstance().resume();
         }
         notifyStatusChange();
-        loginAccount();
+        // loginAccount();
 
     }
 
@@ -261,6 +265,8 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 
     }
 
+    private boolean keyFrameSent = false;
+
     /**
      * upload data to server via uploadSocket
      *
@@ -272,8 +278,20 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             // connect upload socket
             uploadSocket.connect();
 
+            byte[] keyFrame = Utils.getDefaultKeyFrame(getApplicationContext());
+
+            if (keyFrame != null && !keyFrameSent) {
+                // send keyframe first
+                // construct upload data
+                byte[] keyframeData = Utils.byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, keyFrame);
+
+                // upload data via uploadSocket
+                uploadSocket.send(keyframeData, ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA.length + keyFrame.length);
+                keyFrameSent = true;
+            }
+
             // construct upload data
-            byte[] upData = byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, data);
+            byte[] upData = Utils.byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, data);
 
             // upload data via uploadSocket
             uploadSocket.send(upData, ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA.length + size);
@@ -321,6 +339,8 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         savePath = (TextView) findViewById(R.id.activity_main_save_path);
         screenShot = (TextView) findViewById(R.id.activity_main_screen_shot);
         screenShot.setSelected(false);
+        sync = (TextView) findViewById(R.id.activity_main_sync);
+        sync.setSelected(false);
         titleTv = (TextView) findViewById(R.id.title_tv);
         videostreamPreviewTtView = (TextureView) findViewById(R.id.livestream_preview_ttv);
         videostreamPreviewSf = (SurfaceView) findViewById(R.id.livestream_preview_sf);
@@ -365,7 +385,6 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 
         // The callback for receiving the raw H264 video data for camera live view
         mReceivedVideoDataCallBack = new VideoFeeder.VideoDataCallback() {
-
             @Override
             public void onReceive(byte[] videoBuffer, int size) {
 
@@ -382,15 +401,18 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                     } else {
                         log(mLogMesg);
                     }
-                    Message msg = new Message();
-                    msg.what = MSG_SEND;
-                    msg.obj = videoBuffer;
-                    msg.arg1 = size;
-                    backgroundHandler.sendMessage(msg);
-                    // packUpData(videoBuffer, size);
+
+                    if (sync.isSelected()) {
+                        Message msg = new Message();
+                        msg.what = MSG_SEND;
+                        byte[] newVideoBuffer = Arrays.copyOfRange(videoBuffer, 0, videoBuffer.length);
+                        msg.obj = newVideoBuffer;
+                        msg.arg1 = size;
+                        backgroundHandler.sendMessage(msg);
+                        // packUpData(videoBuffer, size);
+                    }
 
                     if (useSurface) {
-                        logd(" recv data to parse ");
                         DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
                     } else if (mCodecManager != null) {
                         logd( " send data to decoder");
@@ -483,14 +505,6 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         frameID = (short) ((frameID+1) %1000 );
 
 
-    }
-
-    //tool to merge two byte[]
-    public static byte[] byteMerger(byte[] byte_1, byte[] byte_2){
-        byte[] byte_3 = new byte[byte_1.length+byte_2.length];
-        arraycopy(byte_1, 0, byte_3, 0, byte_1.length);
-        arraycopy(byte_2, 0, byte_3, byte_1.length, byte_2.length);
-        return byte_3;
     }
 
     @Override
@@ -607,6 +621,11 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             savePath.setText("");
             savePath.setVisibility(View.VISIBLE);
             pathList.clear();
+        }
+
+        if (!sync.isSelected()) {
+            sync.setText("Syncing");
+            sync.setSelected(true);
         }
     }
 

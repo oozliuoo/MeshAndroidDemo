@@ -57,6 +57,8 @@ public class DJIVideoStreamDecoder implements NativeHelper.NativeDataListener {
     private static HandlerThread  handlerThreadNew = new HandlerThread("native parser thread");
     private static Handler handlerNew;
 
+    private byte[] KeyFrame = null;
+
     private final boolean DEBUG = false;
 
     private static DJIVideoStreamDecoder instance;
@@ -169,6 +171,10 @@ public class DJIVideoStreamDecoder implements NativeHelper.NativeDataListener {
     }
     private void loge(String log) {
         loge(TAG, log);
+    }
+
+    public byte[] getKeyFrame() {
+        return KeyFrame;
     }
 
     private DJIVideoStreamDecoder() {
@@ -574,6 +580,7 @@ public class DJIVideoStreamDecoder implements NativeHelper.NativeDataListener {
                 loge("get default key frame error: " + e.getMessage());
             }
             if (defaultKeyFrame != null) {
+                KeyFrame = defaultKeyFrame;
                 DJIFrame iFrame = new DJIFrame(
                         defaultKeyFrame,
                         defaultKeyFrame.length,
