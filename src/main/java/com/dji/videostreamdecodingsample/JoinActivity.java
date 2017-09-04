@@ -31,6 +31,8 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.PriorityQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -304,20 +306,14 @@ public class JoinActivity extends Activity {
     private void downloadStream() {
         byte[] recvData;
         byte[] response;
-        /* try {
-            // connect downloadSocket
-            downloadSocket.connect();
+        PriorityQueue<byte[]> priorityQueue = new PriorityQueue<>(11, comparator);
+        short formerFID = 0;
+        short currentFID;
 
-        } catch (IOException e) {
-            e.printStackTrace();
-            isConnected.set(false);
-            logd(" IOException: on initialize recvsocket handlerthread id = " + Thread.currentThread().getId());
-        } */
-        int count = 0;
         while (isConnected.get()) {
             try {
                 // send join image transmission request server
-                recvData = new byte[6000];
+                recvData = new byte[30720];
                 response = downloadSocket.receive(recvData, recvData.length);
             } catch (SocketTimeoutException e) {
                 logd("recvsocket receive timeout; try one more time");
@@ -330,37 +326,64 @@ public class JoinActivity extends Activity {
             } catch (IOException e) {
                 e.printStackTrace();
                 isConnected.set(false);
-                logd(" IOException: handlerthread id = " + Thread.currentThread().getId());
+                logd("IOException:"+e.toString());
                 break;
             }
+
             try {
                 byte[] videoData = parseVideoData(response);
+                //queue the same frameID segments
+                currentFID = Utils.bytes2shrt(videoData);
 
-                // should remove below after testing
-                String logMsg = "";
-                logMsg += "Received data length: " + videoData.length + "\n buffer (first 10): ";
-                if(count < 10) {
-                    for (int i = 0; i < Math.min(10, videoData.length); i++) {
-                        logMsg += (int) videoData[i];
-                    }
+                //queue the segments of the same frameID and queue the first segment when formerFID=0
+                if (currentFID == formerFID || formerFID == 0) {
+                    priorityQueue.offer(videoData);
+                } else {
+                    byte[] parseData = assembleQueue(priorityQueue);
+                    mCodecManager.sendDataToDecoder(parseData, parseData.length);
+
+                    //here the priorityqueue is empty. Do not forget to offer the latest received data to it.
+                    priorityQueue.offer(videoData);
                 }
-                logd(logMsg);
-                count += 1;
-                logd("receive " + count + " times");
-                // should remove above after testing
-                mCodecManager.sendDataToDecoder(videoData, videoData.length);
-
-                /*
-                */
-
-            } catch (Exception e) {
+                formerFID = currentFID;
+            } catch (Exception e){
                 logd("Generic Exception when parsing/displaying video data: " + e.toString());
                 downloadSocket.close();
             }
+
         }
 
         downloadSocket.close();
     }
+
+    // for priorityqueue to keep the order of segmentID
+    private Comparator<byte[]> comparator = new Comparator<byte[]>() {
+        @Override
+        public int compare(byte[] lhs, byte[] rhs) {
+            return (short)(lhs[2]&0xff | lhs[3]<<8) - (rhs[2]&0xff | rhs[3]<<8);
+        }
+    };
+
+    //pack the queued segments to a frame.
+    private byte[] assembleQueue(PriorityQueue<byte[]> pq){
+        // null exception
+        if (null == pq){
+            return null;
+        }
+        //assemble segments
+        byte[] frame = null;
+        while (!pq.isEmpty()) {
+            byte[] sgm = pq.poll();
+            byte[] temp = new byte[sgm.length-4];
+            System.arraycopy(sgm, 4, temp, 0, sgm.length-4);
+            frame = Utils.byteMerger(frame,temp);
+        }
+
+        return frame;
+
+
+    }
+
 
     /**
      * Parse video data as an array of bytes from response
@@ -369,13 +392,7 @@ public class JoinActivity extends Activity {
      */
     private byte[] parseVideoData(byte[] response) {
         int deviceIdLength = (int) response[1];
-        byte[] videoData = new byte[response.length - 2 - deviceIdLength];
-
-        for (int i = deviceIdLength + 2; i < response.length; i++) {
-            videoData[i - deviceIdLength - 2] = response[i];
-        }
-
-        return videoData;
+        return Arrays.copyOfRange(response, deviceIdLength+2, response.length);
     }
 
     private void parseStream(){

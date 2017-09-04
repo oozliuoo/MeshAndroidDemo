@@ -104,7 +104,6 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     private UDPSocket uploadSocket;
 
     // util variables for testings/debugging
-    private int mCount;
     private String mLogMesg = "";
     private List<String> pathList = new ArrayList<>();
 
@@ -189,7 +188,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                 switch (msg.what){
                     case MSG_SEND:
                         if (sendReady.get()){
-                            uploadData((byte[]) msg.obj, (int)msg.arg1);
+                            uploadData((byte[]) msg.obj);
 
                             logd("MSG_SEND sent. in thread "+ Thread.currentThread().getId());
                         } else {
@@ -206,11 +205,9 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                 }
             }
         };
-        mCount = 0;
 
         initUi();
         initPreviewer();
-        // same as sendmessage(obtainmesssage(msg.what))
         backgroundHandler.obtainMessage(MSG_CONNECT).sendToTarget();
 
     }
@@ -271,9 +268,8 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
      * upload data to server via uploadSocket
      *
      * @param data - data to be uploaded
-     * @param size - size of data
      */
-    private void uploadData(byte[] data, int size) {
+    private void uploadData(byte[] data) {
         try {
             // connect upload socket
             uploadSocket.connect();
@@ -290,25 +286,9 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                 keyFrameSent = true;
             }
 
-            if (size < 1000) {
-                // construct upload data
-                byte[] upData = Utils.byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, data);
 
-                // upload data via uploadSocket
-                uploadSocket.send(upData, ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA.length + size);
-            } else {
-                int offset = 0;
-                while (offset < size) {
-                    int end = (offset + 1000) < size ? (offset + 1000) : size;
-                    byte[] tempBuff = Arrays.copyOfRange(data, offset, end);
-                    // construct upload data
-                    byte[] upData = Utils.byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, tempBuff);
-
-                    // upload data via uploadSocket
-                    uploadSocket.send(upData, ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA.length + tempBuff.length);
-                    offset = end;
-                }
-            }
+            byte[] upData = Utils.byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, data);
+            uploadSocket.send(upData, ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA.length + upData.length);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -403,27 +383,12 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             public void onReceive(byte[] videoBuffer, int size) {
 
                 logd( "camera recv video data size: " + size +" videobuffer.length= "+videoBuffer.length);
-                // test if video buffer can be sent here
-                // videobuffer.length = 30720  but where is the size from.
+                // videobuffer.length = 30720
 
                 if (sendReady.get()) {
-                    if (mCount < 10) {
-                        mLogMesg += "recv data to parse: " + size + "\nbuffer (first 10): ";
-                        for (int i = 0; i < 10; i++) {
-                            mLogMesg += videoBuffer[i] + " ";
-                        }
-                    } else {
-                        log(mLogMesg);
-                    }
 
                     if (sync.isSelected()) {
-                        Message msg = new Message();
-                        msg.what = MSG_SEND;
-                        byte[] newVideoBuffer = Arrays.copyOfRange(videoBuffer, 0, videoBuffer.length);
-                        msg.obj = newVideoBuffer;
-                        msg.arg1 = size;
-                        backgroundHandler.sendMessage(msg);
-                        // packUpData(videoBuffer, size);
+                         packUpData(videoBuffer, size);
                     }
 
                     if (useSurface) {
@@ -432,7 +397,6 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                         logd( " send data to decoder");
                         mCodecManager.sendDataToDecoder(videoBuffer, size);
                     }
-                    mCount += 1;
                 }
 
 
@@ -485,39 +449,34 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 
     private void packUpData(byte[] bytes, int size){
 
-        if (size > 1000){
+        if (size > 1000){ // divide it by 1000 bytes
+
             int segments = size/1000 +1;
-            logd(" segments= "+segments );
             byte[][] buffers = new byte[segments][]; //notice whether 1004 has to be declared
+            // divide into segments
             for (int i=0; i<segments; i++ ){
                 segmentID = (short) ((100+i)%(1<<16 -100));  // to prevent segmentID's overflow.
                 buffers[i][0] = (byte) (frameID<<8);
                 buffers[i][1] = (byte) frameID;
                 buffers[i][2] = (byte) (segmentID<<8);
                 buffers[i][3] = (byte) (segmentID);
-                System.arraycopy(bytes, i*1000, buffers[i], 4, i==segments-1? size- 1000*i :1000); //notice if outofboundary occurs when copy the last part
-//                Message.obtain(backgroundHandler, MSG_SEND, buffers[i]).sendToTarget();
-//                backgroundHandler.obtainMessage(MSG_SEND, buffers[i]).sendToTarget();
+                System.arraycopy(bytes, i*1000, buffers[i], 4, i==segments-1? size- 1000*i :1000);
                 backgroundHandler.sendMessage(backgroundHandler.obtainMessage(MSG_SEND, buffers[i]));
-
                 logd( "byte["+i+"]"+"= "+buffers[i].length);
             }
-        } else {
+        } else { // no need to divide
 
-            byte[] tmpbytes = new byte[4+size];
-            tmpbytes[0] = (byte) (frameID << 8);
-            tmpbytes[1] = (byte) (frameID);
+            byte[] buffer = new byte[4+size];
+            buffer[0] = (byte) (frameID << 8);
+            buffer[1] = (byte) (frameID);
 
-            logd( "tmpbyte[1]= "+tmpbytes[1]);
-            tmpbytes[2] = 0x00;
-            tmpbytes[3] = 0x00;
-            System.arraycopy(bytes, 0, tmpbytes, 4, size);
-//            backgroundHandler.obtainMessage(MSG_SEND, tmpbytes).sendToTarget();
-            backgroundHandler.sendMessage(backgroundHandler.obtainMessage(MSG_SEND,tmpbytes));
+            buffer[2] = 0x00;
+            buffer[3] = 0x00;
+            System.arraycopy(bytes, 0, buffer, 4, size);
+            backgroundHandler.sendMessage(backgroundHandler.obtainMessage(MSG_SEND,buffer));
         }
 
         frameID = (short) ((frameID+1) %1000 );
-
 
     }
 

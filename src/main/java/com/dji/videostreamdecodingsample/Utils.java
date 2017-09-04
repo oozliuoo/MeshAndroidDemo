@@ -47,6 +47,20 @@ public class Utils {
         return byte_3;
     }
 
+    //transfer a short(2bytes) to a byte[2]
+    public static byte[] shrt2byte(short shrt){
+        byte[] bytes = new byte[2];
+        bytes[0] = (byte)shrt;
+        bytes[1] = (byte)( shrt >>8);
+        return bytes;
+    }
+
+    //cuz short occupies two bytes so here only get the lower 2 bytes of a buffer.
+    public static short bytes2shrt(byte[] bytes){
+        return (short) (bytes[0]&0xff | bytes[1]<<8);
+    }
+
+
     // hard coded key frame
     public static byte[] getDefaultKeyFrame(Context context) {
         try {
