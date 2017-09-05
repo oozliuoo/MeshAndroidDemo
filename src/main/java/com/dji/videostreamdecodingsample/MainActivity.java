@@ -274,6 +274,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             // connect upload socket
             uploadSocket.connect();
 
+
             byte[] keyFrame = Utils.getDefaultKeyFrame(getApplicationContext());
 
             if (keyFrame != null && !keyFrameSent) {
