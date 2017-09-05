@@ -1,9 +1,11 @@
 package com.dji.videostreamdecodingsample;
 
 import android.app.Application;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.support.multidex.MultiDexApplication;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -13,7 +15,7 @@ import dji.sdk.base.BaseComponent;
 import dji.sdk.base.BaseProduct;
 import dji.sdk.sdkmanager.DJISDKManager;
 
-public class VideoDecodingApplication extends Application {
+public class VideoDecodingApplication extends MultiDexApplication {
 
     private static final String TAG = VideoDecodingApplication.class.getName();
 

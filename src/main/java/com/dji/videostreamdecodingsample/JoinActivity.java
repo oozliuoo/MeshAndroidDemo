@@ -335,8 +335,8 @@ public class JoinActivity extends Activity {
                 //queue the same frameID segments
                 currentFID = Utils.bytes2shrt(videoData);
 
-                //queue the segments of the same frameID and queue the first segment when formerFID=0
-                if (currentFID == formerFID || formerFID == 0) {
+                //queue the segments of the same frameID and queue the first segment when formerFID=0&&currentFID=0
+                if (currentFID == formerFID ) {
                     priorityQueue.offer(videoData);
                 } else {
                     byte[] parseData = assembleQueue(priorityQueue);

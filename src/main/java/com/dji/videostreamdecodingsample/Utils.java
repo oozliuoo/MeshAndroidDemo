@@ -41,6 +41,10 @@ public class Utils {
 
     //tool to merge two byte[]
     public static byte[] byteMerger(byte[] byte_1, byte[] byte_2){
+        if (null == byte_1)
+            return byte_2;
+        if (null == byte_2)
+            return byte_1;
         byte[] byte_3 = new byte[byte_1.length+byte_2.length];
         arraycopy(byte_1, 0, byte_3, 0, byte_1.length);
         arraycopy(byte_2, 0, byte_3, byte_1.length, byte_2.length);
