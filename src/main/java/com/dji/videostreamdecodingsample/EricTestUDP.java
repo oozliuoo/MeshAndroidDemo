@@ -3,6 +3,7 @@ package com.dji.videostreamdecodingsample;
 import android.content.Context;
 import android.net.DhcpInfo;
 import android.net.wifi.WifiManager;
+import android.util.Log;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -10,6 +11,8 @@ import java.net.SocketTimeoutException;
 import java.util.Comparator;
 import java.util.PriorityQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static com.dji.videostreamdecodingsample.media.NativeHelper.TAG;
 
 /**
  * Created by zhexuanliu on 9/2/17.
@@ -119,20 +122,20 @@ class TestUDP {
                     //remove below logs
                     String logMsg = "";
                     String[] logmsg = new String[20];
-                    logMsg += "\nReceived data length: " + parseData.length + "\n buffer (first 10): ";
+                    logMsg += "\nReceived data length: " + parseData.length ;
                     System.out.println(logMsg);
                     if(count < 10) {
-                        for (int j=0; j< parseData.length/1000; j++)
-                        for (int i = 0; i < Math.min(10, parseData.length); i++) {
+                        for (int j=0; j<= parseData.length/1000; j++)
+                        for (int i = 0; i < Math.min(10, parseData.length-1000*j); i++) {
 //                            logMsg += (int) parseData[i];
-                            logmsg[j] += parseData[i+1000*j];
+                            logmsg[j] += " "+parseData[i+1000*j];
                         }
                     }
                     for (int j=0; j<parseData.length/1000; j++){
-                        System.out.print(logmsg[j]+" | ");
+                        System.out.print(j+": "+logmsg[j]+" |");
                     }
                     count += 1;
-                    System.out.println("receive " + count + " times");
+                    System.out.println("\nreceive " + count + " times");
                     //remove above logs
 
                     //here the priorityqueue is empty. Do not forget to offer the latest received data to it.

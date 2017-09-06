@@ -55,6 +55,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static android.R.attr.breadCrumbShortTitle;
 import static android.R.attr.focusable;
 import static android.R.attr.port;
 import static com.dji.videostreamdecodingsample.Utils.byteMerger;
@@ -73,6 +74,8 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     // Looper messages for backend thread
     private static final int MSG_SEND = 0;
     private static final int MSG_CONNECT = 1;
+    private static final int MSG_PARSE = 2;
+    private static final int MSG_COMPRESS = 3;
 
     // UI Elements
     private TextView titleTv;
@@ -93,6 +96,9 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     // Threads and Handlers
     private HandlerThread backgroundHandlerThread;
     public Handler backgroundHandler;
+
+//    private HandlerThread yuvHandlerThread;
+//    private Handler yuvHandler;
 
     // frame id and segment id
     private short frameID;
@@ -190,9 +196,23 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                 switch (msg.what){
                     case MSG_SEND:
                         if (sendReady.get()){
-                            uploadData((byte[]) msg.obj, msg.arg1);
 
-                            logd("MSG_SEND sent. in thread "+ Thread.currentThread().getId());
+                            if (!keyFrameSent){
+                                byte[] keyframe = getKeyFrameData();
+                                if (null!=keyframe) {
+                                    int size = keyframe.length;
+                                    uploadData(keyframe, size);
+                                    keyFrameSent = true;
+                                }
+                            } else {
+                                uploadData((byte[])msg.obj, msg.arg1);
+                                logd("MSG_SEND sent. in thread " + Thread.currentThread().getId());
+                            }
+
+//                            byte[] data = keyFrameSent? (byte[]) msg.obj : getKeyFrameData();
+//                            int size = keyFrameSent? msg.arg1: getKeyFrameData().length ;
+//                            uploadData(data, size);
+//                            keyFrameSent = true;
                         } else {
                             logd(" not registered");
                         }
@@ -211,6 +231,26 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         initUi();
         initPreviewer();
         backgroundHandler.obtainMessage(MSG_CONNECT).sendToTarget();
+
+//        yuvHandlerThread = new HandlerThread("thread to get yuvdata");
+//        yuvHandlerThread.start();
+//        yuvHandler = new Handler(yuvHandlerThread.getLooper()){
+//            @Override
+//            public void handleMessage(Message msg) {
+//                switch (msg.what){
+//                    case MSG_PARSE:
+//                        DJIVideoStreamDecoder.getInstance().parse((byte[]) msg.obj, msg.arg1);
+//                        break;
+//                    case MSG_COMPRESS:
+//                        // reference the compress method
+//                        compressYuvData((byte[]) msg.obj, msg.arg1, msg.arg2);
+//                        break;
+//                    default:
+//                        break;
+//                }
+//            }
+//        };
+
 
     }
 
@@ -267,6 +307,19 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     private boolean keyFrameSent = false;
 
     /**
+     * get the keyframe
+     * @return byte[] keyframe
+     */
+    private byte[] getKeyFrameData(){
+
+        byte[] keyFrame = Utils.getDefaultKeyFrame(getApplicationContext());
+
+            // send keyframe first
+            // construct upload data
+            return Utils.byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, keyFrame);
+
+    }
+    /**
      * upload data to server via uploadSocket
      *
      * @param data - data to be uploaded
@@ -276,19 +329,6 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         try {
             // connect upload socket
             uploadSocket.connect();
-
-
-            byte[] keyFrame = Utils.getDefaultKeyFrame(getApplicationContext());
-
-            if (keyFrame != null && !keyFrameSent) {
-                // send keyframe first
-                // construct upload data
-                byte[] keyframeData = Utils.byteMerger(ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA, keyFrame);
-
-                // upload data via uploadSocket
-                uploadSocket.send(keyframeData, ServerInfo.PUSH_IMAGE_TRANSMISSION_DATA.length + keyFrame.length);
-                keyFrameSent = true;
-            }
 
             if (size > 1000){ // divide it by 1000 bytes
 
@@ -334,6 +374,14 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             e.printStackTrace();
         }
     }
+
+//    private void compressYuvData(byte[] yuvFrame, int width, int height){
+//        //            yuvHandlerThread.join(50);
+//        String str = "";
+//        for (int i=0; i<10; i++)
+//            str+= yuvFrame[i];
+//        logd( "first 10 bytes of yuvframe= "+str);
+//    }
 
     public Handler mainHandler = new Handler(Looper.getMainLooper()) {
         @Override
@@ -425,26 +473,31 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             @Override
             public void onReceive(byte[] videoBuffer, int size) {
 
-                logd( "camera recv video data size: " + size +" videobuffer.length= "+videoBuffer.length);
-                // videobuffer.length = 30720
+//                logd( "camera recv video data size: " + size +" videobuffer.length= "+videoBuffer.length);
+                //  note that videobuffer.length is 30720 as defined
 
                 if (sendReady.get()) {
 
                     if (sync.isSelected()) {
                         //remove below logs
 //                        if (mCount < 10) {
-//                            mLogMesg += "\nrecv data to parse: " + size + "\nbuffer (first 10): ";
-//                            for (int j=0; j< size/1000; j++) {
-//                                for (int i = 0; i < 10; i++) {
+//                            mLogMesg += "\nrecv data to parse: " + size +"\n";
+//                            logd("\n recv data to parse:"+ size+"\n");
+//                            for (int j=0; j<= size/1000; j++) {
+//                                for (int i = 0; i < Math.min(10, size-1000*j); i++) {
 ////                                mLogMesg += videoBuffer[i] + " ";
-//                                    logmsg[j] += videoBuffer[i + 1000 * j] + " ";
+//                                    logmsg[j] += " "+videoBuffer[i + 1000 * j];
 //                                }
-//                                mLogMesg += logmsg[j]+" | ";
+//                                mLogMesg += j+":"+logmsg[j]+" |";
+//                                logd(j+ ":"+ logmsg[j]+" |");
+//                                logmsg[j] = "";
 //                            }
-//                        } else {
+//                            logd("\n send "+ mCount+ "times");
+//                        }else {
 //                            log(mLogMesg);
 //                        }
 //                        mCount++;
+//                        mLogMesg += "\n send "+ mCount+ "times";
                         //remove above logs
 
                         Message msg = new Message();
@@ -459,8 +512,10 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                     if (useSurface) {
                         DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
                     } else if (mCodecManager != null) {
-                        logd( " send data to decoder");
+//                        logd( " send data to decoder");
                         mCodecManager.sendDataToDecoder(videoBuffer, size);
+                        // to get yuv data from yuv callback
+                        DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
                     }
                 }
 
@@ -493,6 +548,8 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                 if (mCodecManager == null) {
                     mCodecManager = new DJICodecManager(getApplicationContext(), surface, width, height);
                 }
+                DJIVideoStreamDecoder.getInstance().init(getApplicationContext(), null);
+                DJIVideoStreamDecoder.getInstance().setYuvDataListener(MainActivity.this);
             }
 
             @Override
@@ -528,7 +585,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                 System.arraycopy(bytes, i*1000, buffers[i], 4, i==segments-1? size- 1000*i :1000);
 //                backgroundHandler.sendMessage(backgroundHandler.obtainMessage(MSG_SEND, buffers[i]));
 
-                logd( "byte["+i+"]"+"= "+buffers[i].length);
+//                logd( "byte["+i+"]"+"= "+buffers[i].length);
             }
         } else { // no need to divide
 
@@ -551,56 +608,65 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     @Override
     public void onYuvDataReceived(byte[] yuvFrame, int width, int height) {
         //here if connected then send the output decoded framedata to server.
-       logd("into onYuvDataReceived yuvFrame.size= "+ yuvFrame.length );
+       logd("into onYuvDataReceived yuvFrame.length= "+ yuvFrame.length );
         if (sendReady.get()) {
 //            packUpData(yuvFrame);
 //            showToast("packupdata in YuvDataReceived callback");
+
+//            yuvHandler.obtainMessage(MSG_COMPRESS, width, height, yuvFrame).sendToTarget();
+            Intent intent = new Intent(MainActivity.this, CompressIntentService.class);
+            //yuvdata is too large to pass by putExtra
+//            intent.putExtra(CompressIntentService.YUVEXTRA, yuvFrame);
+            DataHolder.getInstance().setYuvFrame(yuvFrame);
+            intent.putExtra(CompressIntentService.YUVWIDTH, width);
+            intent.putExtra(CompressIntentService.YUVHEIGHT, height);
+            startService(intent);
         }
 
         //In this demo, we test the YUV data by saving it into JPG files.
-        if (DJIVideoStreamDecoder.getInstance().frameIndex % 30 == 0) {
-            byte[] y = new byte[width * height];
-            byte[] u = new byte[width * height / 4];
-            byte[] v = new byte[width * height / 4];
-            byte[] nu = new byte[width * height / 4]; //
-            byte[] nv = new byte[width * height / 4];
-            arraycopy(yuvFrame, 0, y, 0, y.length);
-            for (int i = 0; i < u.length; i++) {
-                v[i] = yuvFrame[y.length + 2 * i];
-                u[i] = yuvFrame[y.length + 2 * i + 1];
-            }
-            int uvWidth = width / 2;
-            int uvHeight = height / 2;
-            for (int j = 0; j < uvWidth / 2; j++) {
-                for (int i = 0; i < uvHeight / 2; i++) {
-                    byte uSample1 = u[i * uvWidth + j];
-                    byte uSample2 = u[i * uvWidth + j + uvWidth / 2];
-                    byte vSample1 = v[(i + uvHeight / 2) * uvWidth + j];
-                    byte vSample2 = v[(i + uvHeight / 2) * uvWidth + j + uvWidth / 2];
-                    nu[2 * (i * uvWidth + j)] = uSample1;
-                    nu[2 * (i * uvWidth + j) + 1] = uSample1;
-                    nu[2 * (i * uvWidth + j) + uvWidth] = uSample2;
-                    nu[2 * (i * uvWidth + j) + 1 + uvWidth] = uSample2;
-                    nv[2 * (i * uvWidth + j)] = vSample1;
-                    nv[2 * (i * uvWidth + j) + 1] = vSample1;
-                    nv[2 * (i * uvWidth + j) + uvWidth] = vSample2;
-                    nv[2 * (i * uvWidth + j) + 1 + uvWidth] = vSample2;
-                }
-            }
-            //nv21test
-            byte[] bytes = new byte[yuvFrame.length];
-            arraycopy(y, 0, bytes, 0, y.length);
-            for (int i = 0; i < u.length; i++) {
-                bytes[y.length + (i * 2)] = nv[i];
-                bytes[y.length + (i * 2) + 1] = nu[i];
-            }
-            Log.d(TAG,
-                    "onYuvDataReceived: frame index: "
-                            + DJIVideoStreamDecoder.getInstance().frameIndex
-                            + ",array length: "
-                            + bytes.length);
-            screenShot(bytes, Environment.getExternalStorageDirectory() + "/DJI_ScreenShot");
-        }
+//        if (DJIVideoStreamDecoder.getInstance().frameIndex % 30 == 0) {
+//            byte[] y = new byte[width * height];
+//            byte[] u = new byte[width * height / 4];
+//            byte[] v = new byte[width * height / 4];
+//            byte[] nu = new byte[width * height / 4]; //
+//            byte[] nv = new byte[width * height / 4];
+//            arraycopy(yuvFrame, 0, y, 0, y.length);
+//            for (int i = 0; i < u.length; i++) {
+//                v[i] = yuvFrame[y.length + 2 * i];
+//                u[i] = yuvFrame[y.length + 2 * i + 1];
+//            }
+//            int uvWidth = width / 2;
+//            int uvHeight = height / 2;
+//            for (int j = 0; j < uvWidth / 2; j++) {
+//                for (int i = 0; i < uvHeight / 2; i++) {
+//                    byte uSample1 = u[i * uvWidth + j];
+//                    byte uSample2 = u[i * uvWidth + j + uvWidth / 2];
+//                    byte vSample1 = v[(i + uvHeight / 2) * uvWidth + j];
+//                    byte vSample2 = v[(i + uvHeight / 2) * uvWidth + j + uvWidth / 2];
+//                    nu[2 * (i * uvWidth + j)] = uSample1;
+//                    nu[2 * (i * uvWidth + j) + 1] = uSample1;
+//                    nu[2 * (i * uvWidth + j) + uvWidth] = uSample2;
+//                    nu[2 * (i * uvWidth + j) + 1 + uvWidth] = uSample2;
+//                    nv[2 * (i * uvWidth + j)] = vSample1;
+//                    nv[2 * (i * uvWidth + j) + 1] = vSample1;
+//                    nv[2 * (i * uvWidth + j) + uvWidth] = vSample2;
+//                    nv[2 * (i * uvWidth + j) + 1 + uvWidth] = vSample2;
+//                }
+//            }
+//            //nv21test
+//            byte[] bytes = new byte[yuvFrame.length];
+//            arraycopy(y, 0, bytes, 0, y.length);
+//            for (int i = 0; i < u.length; i++) {
+//                bytes[y.length + (i * 2)] = nv[i];
+//                bytes[y.length + (i * 2) + 1] = nu[i];
+//            }
+//            Log.d(TAG,
+//                    "onYuvDataReceived: frame index: "
+//                            + DJIVideoStreamDecoder.getInstance().frameIndex
+//                            + ",array length: "
+//                            + bytes.length);
+//            screenShot(bytes, Environment.getExternalStorageDirectory() + "/DJI_ScreenShot");
+//        }
     }
 
     /**

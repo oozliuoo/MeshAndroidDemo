@@ -21,6 +21,7 @@ public class VideoDecodingApplication extends MultiDexApplication {
 
     public static final String FLAG_CONNECTION_CHANGE = "dji_sdk_connection_change";
 
+
     private static BaseProduct mProduct;
 
     private Handler mHandler;
