@@ -68,6 +68,8 @@ public class VideoResampler {
 
     private int mIFrameInterval = IFRAME_INTERVAL_10;
 
+    private byte[] mRawVideo = null;
+
     // private Uri mInputUri;
     private Uri mOutputUri;
 
@@ -95,8 +97,8 @@ public class VideoResampler {
 
     long mEncoderPresentationTimeUs = 0;
 
-    public VideoResampler() {
-
+    public VideoResampler(byte[] rawVideo) {
+        this.mRawVideo = rawVideo;
     }
 
    /*
@@ -133,7 +135,7 @@ public class VideoResampler {
      * public void setEndTime( int endTime ) { mEndTime = endTime; }
      */
     public void start() throws Throwable {
-        VideoEditWrapper wrapper = new VideoEditWrapper();
+        VideoEditWrapper wrapper = new VideoEditWrapper(this.mRawVideo);
         Thread th = new Thread( wrapper, "Video resample test" );
         th.start();
         th.join();
@@ -147,7 +149,12 @@ public class VideoResampler {
      * SurfaceTexture.OnFrameAvailableListener works when the current thread has a Looper configured.
      */
     private class VideoEditWrapper implements Runnable {
+        private byte[] mRawVideo = null;
         private Throwable mThrowable;
+
+        public VideoEditWrapper(byte[] rawVideo) {
+            this.mRawVideo = rawVideo;
+        }
 
         @Override
         public void run() {
@@ -168,11 +175,15 @@ public class VideoResampler {
         outputFormat.setInteger( MediaFormat.KEY_FRAME_RATE, mFrameRate );
         outputFormat.setInteger( MediaFormat.KEY_I_FRAME_INTERVAL, mIFrameInterval );
 
-        mEncoder = MediaCodec.createEncoderByType( MediaHelper.MIME_TYPE_AVC );
-        mEncoder.configure( outputFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE );
-        mInputSurface = new InputSurface( mEncoder.createInputSurface() );
-        mInputSurface.makeCurrent();
-        mEncoder.start();
+        try {
+            mEncoder = MediaCodec.createEncoderByType(MediaHelper.MIME_TYPE_AVC);
+            mEncoder.configure(outputFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            mInputSurface = new InputSurface(mEncoder.createInputSurface());
+            mInputSurface.makeCurrent();
+            mEncoder.start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void setupMuxer() {
@@ -189,22 +200,20 @@ public class VideoResampler {
         setupEncoder();
         setupMuxer();
 
-        for ( SamplerClip clip : mClips ) {
-            feedClipToEncoder( clip );
-        }
+        feedClipToEncoder();
 
         mEncoder.signalEndOfInputStream();
 
         releaseOutputResources();
     }
 
-    private void feedClipToEncoder( SamplerClip clip ) {
+    private void feedClipToEncoder() {
 
         mLastSampleTime = 0;
 
         MediaCodec decoder = null;
 
-        MediaExtractor extractor = setupExtractorForClip(clip);
+        MediaExtractor extractor = setupExtractor();
 
         if(extractor == null ) {
             return;
@@ -215,10 +224,12 @@ public class VideoResampler {
 
         MediaFormat clipFormat = extractor.getTrackFormat( trackIndex );
 
+        /*
         if ( clip.getStartTime() != -1 ) {
             extractor.seekTo( clip.getStartTime() * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC );
             clip.setStartTime( extractor.getSampleTime() / 1000 );
         }
+        */
 
         try {
             decoder = MediaCodec.createDecoderByType( MediaHelper.MIME_TYPE_AVC );
@@ -227,8 +238,10 @@ public class VideoResampler {
             decoder.configure( clipFormat, mOutputSurface.getSurface(), null, 0 );
             decoder.start();
 
-            resampleVideo( extractor, decoder, clip );
+            resampleVideo( extractor, decoder );
 
+        } catch (IOException e ) {
+            e.printStackTrace();
         } finally {
 
             if ( mOutputSurface != null ) {
@@ -246,12 +259,14 @@ public class VideoResampler {
         }
     }
 
-    private MediaExtractor setupExtractorForClip(SamplerClip clip ) {
+    @TargetApi(23)
+    private MediaExtractor setupExtractor() {
 
 
         MediaExtractor extractor = new MediaExtractor();
         try {
-            extractor.setDataSource( clip.getUri().toString() );
+            MeshVideoDataSource ds = new MeshVideoDataSource(this.mRawVideo);
+            extractor.setDataSource( ds );
         } catch ( IOException e ) {
             e.printStackTrace();
             return null;
@@ -294,18 +309,14 @@ public class VideoResampler {
         }
     }
 
-    private void resampleVideo( MediaExtractor extractor, MediaCodec decoder, SamplerClip clip ) {
+    private void resampleVideo( MediaExtractor extractor, MediaCodec decoder ) {
         ByteBuffer[] decoderInputBuffers = decoder.getInputBuffers();
         ByteBuffer[] encoderOutputBuffers = mEncoder.getOutputBuffers();
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         int inputChunk = 0;
         int outputCount = 0;
 
-        long endTime = clip.getEndTime();
-
-        if ( endTime == -1 ) {
-            endTime = clip.getVideoDuration();
-        }
+        int decoderInputByteCount = 0;
 
         boolean outputDoneNextTimeWeCheck = false;
 
@@ -320,7 +331,7 @@ public class VideoResampler {
             if ( !inputDone ) {
                 int inputBufIndex = decoder.dequeueInputBuffer( TIMEOUT_USEC );
                 if ( inputBufIndex >= 0 ) {
-                    if ( extractor.getSampleTime() / 1000 >= endTime ) {
+                    if ( decoderInputByteCount > this.mRawVideo.length ) {
                         // End of stream -- send empty frame with EOS flag set.
                         decoder.queueInputBuffer( inputBufIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM );
                         inputDone = true;
@@ -343,6 +354,7 @@ public class VideoResampler {
                         }
 
                         inputChunk++;
+                        decoderInputByteCount += sampleSize;
                     }
                 } else {
                     if ( VERBOSE )
@@ -449,9 +461,7 @@ public class VideoResampler {
 
                             long nSecs = info.presentationTimeUs * 1000;
 
-                            if ( clip.getStartTime() != -1 ) {
-                                nSecs = ( info.presentationTimeUs - ( clip.getStartTime() * 1000 ) ) * 1000;
-                            }
+                            nSecs = ( info.presentationTimeUs) * 1000;
 
                             Log.d( "this", "Setting presentation time " + nSecs / ( 1000 * 1000 ) );
                             nSecs = Math.max( 0, nSecs );

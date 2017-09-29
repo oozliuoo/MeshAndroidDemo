@@ -12,6 +12,7 @@ import android.graphics.YuvImage;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -27,6 +28,7 @@ import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.dji.videostreamdecodingsample.Util.VideoResampler;
 import com.dji.videostreamdecodingsample.media.DJIVideoStreamDecoder;
 
 import com.dji.videostreamdecodingsample.media.NativeHelper;
@@ -512,6 +514,8 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 
     private int mCount =0;
     private String[] logmsg = new String[20];
+    private ArrayList<byte[]> tempBufferList = new ArrayList<byte[]>();
+
     private void notifyStatusChange() {
 
         mProduct = VideoDecodingApplication.getProductInstance();
@@ -571,6 +575,40 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                         mCodecManager.sendDataToDecoder(videoBuffer, size);
                         // to get yuv data from yuv callback
                         // DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
+                        tempBufferList.add(videoBuffer);
+
+                        /*
+                        if (tempBufferList.size() > 500) {
+                            long totalSize = 0;
+                            for (int i = 0; i < tempBufferList.size(); i ++) {
+                                totalSize += tempBufferList.get(i).length;
+                            }
+
+                            byte[] newBuffer = new byte[(int)totalSize];
+                            totalSize = 0;
+                            for (int i = 0; i < tempBufferList.size(); i ++) {
+                                byte[] buffer = tempBufferList.get(i);
+                                System.arraycopy(newBuffer, (int)totalSize, buffer, 0, buffer.length);
+                                totalSize += buffer.length;
+                            }
+
+                            VideoResampler resampler = new VideoResampler(newBuffer);
+                            // resampler.setInput( inputUri );
+                            resampler.setOutput( Uri.parse("/mnt/sdcard/resample.mp4") );
+
+                            resampler.setOutputResolution( mWidth, mHeight );
+                            resampler.setOutputBitRate( BIT_RATE );
+                            resampler.setOutputFrameRate( FRAME_RATE );
+                            resampler.setOutputIFrameInterval( IFRAME_INTERVAL );
+
+                            try {
+                                resampler.start();
+                            } catch ( Throwable e ) {
+                                e.printStackTrace();
+                            }
+                        }
+                        */
+
                     }
                 }
 
