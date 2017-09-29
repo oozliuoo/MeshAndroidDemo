@@ -570,7 +570,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 //                        logd( " send data to decoder");
                         mCodecManager.sendDataToDecoder(videoBuffer, size);
                         // to get yuv data from yuv callback
-                        DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
+                        // DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
                     }
                 }
 
@@ -627,7 +627,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     @Override
     public void onYuvDataReceived(byte[] yuvFrame, int width, int height) {
         //here if connected then send the output decoded framedata to server.
-       logd("into onYuvDataReceived yuvFrame.length= "+ yuvFrame.length );
+        logd("into onYuvDataReceived yuvFrame.length= "+ yuvFrame.length );
         if (sendReady.get()) {
             // showToast("packupdata in YuvDataReceived callback");
 
