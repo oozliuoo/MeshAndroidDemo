@@ -57,6 +57,10 @@ public class NativeHelper {
      */
     public native boolean release();
 
+    public native byte[] scaleImage(byte[] src, int src_width, int src_height, int dst_width, int dst_height, int frame_num);
+
+    public native int testNative();
+
     static{
         System.loadLibrary("ffmpegjni");
         System.loadLibrary("djivideojni");

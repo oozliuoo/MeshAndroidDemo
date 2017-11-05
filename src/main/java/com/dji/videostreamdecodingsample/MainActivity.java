@@ -14,6 +14,7 @@ import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -44,6 +45,8 @@ import dji.sdk.camera.Camera;
 import dji.sdk.useraccount.UserAccountManager;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -55,6 +58,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static android.R.attr.format;
 import static dji.midware.media.d.w;
+import static dji.sdksharedlib.extension.a.f;
 
 public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuvDataListener {
     private static final String TAG = MainActivity.class.getSimpleName();
@@ -69,6 +73,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
     // Looper messages for backend thread
     private static final int MSG_SEND = 0;
     private static final int MSG_CONNECT = 1;
+    private static final int MSG_COMPRESS = 2;
 
     // constants
     private String MIME_TYPE = "video/avc";
@@ -227,6 +232,10 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 
                     case MSG_CONNECT:
                         registerDevice();
+                        break;
+                    case MSG_COMPRESS:
+                        // to get yuv data from yuv callback
+                        DJIVideoStreamDecoder.getInstance().parse((byte[])msg.obj, msg.arg1);
                         break;
 
                     default:
@@ -535,7 +544,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
 //                logd( "camera recv video data size: " + size +" videobuffer.length= "+videoBuffer.length);
                 //  note that videobuffer.length is 30720 as defined
 
-                if (sendReady.get()) {
+                // if (sendReady.get()) {
 
                     if (sync.isSelected()) {
                         //remove below logs
@@ -573,10 +582,17 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                     } else if (mCodecManager != null) {
 //                        logd( " send data to decoder");
                         mCodecManager.sendDataToDecoder(videoBuffer, size);
-                        // to get yuv data from yuv callback
-                        // DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
-                        tempBufferList.add(videoBuffer);
+                        DJIVideoStreamDecoder.getInstance().parse(videoBuffer, size);
+                        // tempBufferList.add(videoBuffer);
 
+                        /*
+                        Message msg = new Message();
+                        msg.what = MSG_COMPRESS;
+                        byte[] newVideoBuffer = Arrays.copyOfRange(videoBuffer, 0, videoBuffer.length);
+                        msg.obj = newVideoBuffer;
+                        msg.arg1 = size;
+                        backgroundHandler.sendMessage(msg);
+                        */
                         /*
                         if (tempBufferList.size() > 500) {
                             long totalSize = 0;
@@ -610,7 +626,7 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
                         */
 
                     }
-                }
+                // }
 
 
             }
@@ -662,24 +678,21 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
         });
     }
 
+    private boolean mScaledFrame = false;
+    private int mYuvFrameCount = 0;
     @Override
     public void onYuvDataReceived(byte[] yuvFrame, int width, int height) {
         //here if connected then send the output decoded framedata to server.
         logd("into onYuvDataReceived yuvFrame.length= "+ yuvFrame.length );
-        if (sendReady.get()) {
+        // if (sendReady.get()) {
             // showToast("packupdata in YuvDataReceived callback");
 
-            /*
-            Intent intent = new Intent(MainActivity.this, CompressIntentService.class);
-            intent.putExtra(CompressIntentService.YUV_DATA_PART1_KEY, Arrays.copyOfRange(yuvFrame, 0, yuvFrame.length / 2));
-            intent.putExtra(CompressIntentService.YUV_DATA_PART2_KEY, Arrays.copyOfRange(yuvFrame, yuvFrame.length / 2, yuvFrame.length));
-            // DataHolder.getInstance().setYuvFrame(yuvFrame);
-            startService(intent);
-            */
             // compress received image
+            /*
             YuvImage yuvImage = new YuvImage(yuvFrame, ImageFormat.YUY2, width, height, null);
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             Rect rect = new Rect(0, 0, width, height);
+             */
             /* yuvImage.compressToJpeg(rect, 100, outputStream);
             byte[] imageByte = outputStream.toByteArray();
             Bitmap image = BitmapFactory.decodeByteArray(imageByte, 0, imageByte.length);
@@ -690,12 +703,97 @@ public class MainActivity extends Activity implements DJIVideoStreamDecoder.IYuv
             byte[] byteArray = stream.toByteArray();
 
             this.inputQueue.offer(byteArray);
-            logd("After compress, frame.length= "+ byteArray.length ); */
+            logd("After compress, frame.length= "+ byteArray.length );
+            */
 
             /* if (null == this.codec) {
                 initCodec();
             } */
+        // }
+        byte[] y = new byte[width * height];
+        byte[] u = new byte[width * height / 4];
+        byte[] v = new byte[width * height / 4];
+        byte[] nu = new byte[width * height / 4]; //
+        byte[] nv = new byte[width * height / 4];
+        System.arraycopy(yuvFrame, 0, y, 0, y.length);
+        for (int i = 0; i < u.length; i++) {
+            v[i] = yuvFrame[y.length + 2 * i];
+            u[i] = yuvFrame[y.length + 2 * i + 1];
         }
+        int uvWidth = width / 2;
+        int uvHeight = height / 2;
+        for (int j = 0; j < uvWidth / 2; j++) {
+            for (int i = 0; i < uvHeight / 2; i++) {
+                byte uSample1 = u[i * uvWidth + j];
+                byte uSample2 = u[i * uvWidth + j + uvWidth / 2];
+                byte vSample1 = v[(i + uvHeight / 2) * uvWidth + j];
+                byte vSample2 = v[(i + uvHeight / 2) * uvWidth + j + uvWidth / 2];
+                nu[2 * (i * uvWidth + j)] = uSample1;
+                nu[2 * (i * uvWidth + j) + 1] = uSample1;
+                nu[2 * (i * uvWidth + j) + uvWidth] = uSample2;
+                nu[2 * (i * uvWidth + j) + 1 + uvWidth] = uSample2;
+                nv[2 * (i * uvWidth + j)] = vSample1;
+                nv[2 * (i * uvWidth + j) + 1] = vSample1;
+                nv[2 * (i * uvWidth + j) + uvWidth] = vSample2;
+                nv[2 * (i * uvWidth + j) + 1 + uvWidth] = vSample2;
+            }
+        }
+        //nv21test
+        byte[] bytes = new byte[yuvFrame.length];
+        System.arraycopy(y, 0, bytes, 0, y.length);
+        for (int i = 0; i < u.length; i++) {
+            bytes[y.length + (i * 2)] = nv[i];
+            bytes[y.length + (i * 2) + 1] = nu[i];
+        }
+
+        mYuvFrameCount ++;
+
+        Log.e("dsm", "frameCount: " + mYuvFrameCount);
+        // store original file
+        String albumName = "yuvTest";
+        String originalFileName = "origin" + Integer.toString(mYuvFrameCount) + ".yuv";
+        Log.e("dsm", "Storing file: " + originalFileName);
+        File originalF = getAlbumStorageDir(albumName, originalFileName);
+        FileOutputStream originalOutputStream;
+        try {
+            originalOutputStream = new FileOutputStream(originalF);
+            originalOutputStream.write(bytes);
+            originalOutputStream.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        byte[] scaledImage = NativeHelper.getInstance().scaleImage(bytes, width, height, 320, 180, 1);
+
+        // store scaled file
+        String filename = "scaled" + Integer.toString(mYuvFrameCount) + ".yuv";
+        File f = getAlbumStorageDir(albumName, filename);
+        FileOutputStream outputStream;
+        try {
+            outputStream = new FileOutputStream(f);
+            outputStream.write(scaledImage);
+            outputStream.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public File getAlbumStorageDir(String albumName, String filename) {
+        // Get the directory for the user's public pictures directory.
+        File dir = new File(Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_PICTURES), albumName);
+        if (!dir.mkdirs()) {
+            Log.e("dsm", "Directory not created");
+        }
+
+        File file = new File(Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_PICTURES), albumName + "/" + filename);
+
+        try {
+            file.createNewFile();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return file;
     }
 
     public void onClick(View v) {

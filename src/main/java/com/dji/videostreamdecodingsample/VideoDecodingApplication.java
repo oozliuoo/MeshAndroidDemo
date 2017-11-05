@@ -9,6 +9,8 @@ import android.support.multidex.MultiDexApplication;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.dji.videostreamdecodingsample.media.NativeHelper;
+
 import dji.common.error.DJIError;
 import dji.common.error.DJISDKError;
 import dji.sdk.base.BaseComponent;
@@ -40,6 +42,8 @@ public class VideoDecodingApplication extends MultiDexApplication {
         mHandler = new Handler(Looper.getMainLooper());
         DJISDKManager.getInstance().registerApp(this, mDJISDKManagerCallback);
 
+        NativeHelper.getInstance().init();
+        int testInt = NativeHelper.getInstance().testNative();
     }
 
     private DJISDKManager.SDKManagerCallback mDJISDKManagerCallback = new DJISDKManager.SDKManagerCallback() {

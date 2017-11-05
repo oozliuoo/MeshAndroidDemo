@@ -46,6 +46,8 @@ public class UDPSocket {
             this.mAddress = InetAddress.getByName(ip);
         } catch (IOException e) {
             e.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         this.mOutPort = outPort;
         this.mTimeout = timeout > 0 ? timeout : DEFAULT_TIMEOUT;
